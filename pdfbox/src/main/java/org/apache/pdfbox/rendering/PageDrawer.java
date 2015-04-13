@@ -523,8 +523,16 @@ public final class PageDrawer extends PDFGraphicsStreamEngine
     public void fillPath(int windingRule) throws IOException
     {
         graphics.setComposite(getGraphicsState().getNonStrokingJavaComposite());
-        graphics.setPaint(getNonStrokingPaint());
         setClip();
+        PDSoftMask softMask = getGraphicsState().getSoftMask();
+        if (softMask != null) {
+        	Paint paint = getNonStrokingPaint();
+        	paint = applySoftMaskToPaint(paint, softMask);
+            graphics.setPaint(paint);
+        }
+        else {
+            graphics.setPaint(getNonStrokingPaint());
+        }
         linePath.setWindingRule(windingRule);
 
         // disable anti-aliasing for rectangular paths, this is a workaround to avoid small stripes
