@@ -14,38 +14,45 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.pdfbox.pdmodel.graphics.shading;
 
-import java.awt.geom.Point2D;
+package org.apache.pdfbox.rendering;
+
+import org.apache.pdfbox.pdmodel.PDPage;
 
 /**
- * Vertex for Type 4 and Type 5 shadings.
- *
- * @author Tilman Hausherr
+ * Parameters for a PageDrawer. This class ensures allows PDFRenderer and PageDrawer to share
+ * private implementation data in a future-proof manner, while still allowing end-users to create
+ * their own subclasses of PageDrawer.
+ * 
+ * @author John Hewson
  */
-class Vertex
+public final class PageDrawerParameters
 {
-    public Point2D point;
-    public float[] color;
+    private final PDFRenderer renderer;
+    private final PDPage page;
 
-    Vertex(Point2D p, float[] c)
+    /**
+     * Package-private constructor.
+     */
+    PageDrawerParameters(PDFRenderer renderer, PDPage page)
     {
-        point = p;
-        color = c.clone();
+        this.renderer = renderer;
+        this.page = page;
     }
 
-    @Override
-    public String toString()
+    /**
+     * Returns the page.
+     */
+    public PDPage getPage()
     {
-        StringBuilder sb = new StringBuilder();
-        for (float f : color)
-        {
-            if (sb.length() > 0)
-            {
-                sb.append(' ');
-            }
-            sb.append(String.format("%3.2f", f));
-        }
-        return "Vertex{ " + point + ", colors=[" + sb + "] }";
+        return page;
+    }
+    
+    /**
+     * Returns the renderer.
+     */
+    PDFRenderer getRenderer()
+    {
+        return renderer;
     }
 }
