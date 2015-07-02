@@ -17,10 +17,17 @@
 package org.apache.pdfbox.pdmodel.interactive.form;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
 
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceEntry;
 
 /**
  * A check box toggles between two states, on and off.
@@ -30,155 +37,210 @@ import org.apache.pdfbox.cos.COSName;
  */
 public final class PDCheckbox extends PDButton
 {
-    
     /**
-     * @see PDFieldTreeNode#PDFieldTreeNode(PDAcroForm)
+     * @see PDField#PDField(PDAcroForm)
      *
-     * @param theAcroForm The acroform.
+     * @param acroForm The acroform.
      */
-    public PDCheckbox(PDAcroForm theAcroForm)
+    public PDCheckbox(PDAcroForm acroForm)
     {
-        super( theAcroForm );
+        super(acroForm);
     }
     
     /**
      * Constructor.
      * 
-     * @param theAcroForm The form that this field is part of.
+     * @param acroForm The form that this field is part of.
      * @param field the PDF object to represent as a field.
-     * @param parentNode the parent node of the node to be created
+     * @param parent the parent node of the node
      */
-    public PDCheckbox( PDAcroForm theAcroForm, COSDictionary field, PDFieldTreeNode parentNode)
+    PDCheckbox(PDAcroForm acroForm, COSDictionary field, PDNonTerminalField parent)
     {
-        super( theAcroForm, field, parentNode);
+        super(acroForm, field, parent);
     }
 
     /**
      * This will tell if this radio button is currently checked or not.
+     * This is equivalent to calling {@link #getValue()}.
      *
-     * @return true If the radio button is checked.
-     * @throws IOException 
+     * @return true If this field is checked.
      */
-    public boolean isChecked() throws IOException
+    public boolean isChecked()
     {
-        String onValue = getOnValue();
-        String fieldValue = null;
-        try
-        {
-            fieldValue = getValue();
-        }
-        catch (IOException e)
-        {
-            // getting there means that the field value
-            // doesn't have a supported type.
-            // Ignoring as that will also mean that the field is not checked.
-            // Setting the value explicitly as Code Analysis (Sonar) doesn't like
-            // empty catch blocks.
-            return false;
-        }
-        COSName radioValue = (COSName)getDictionary().getDictionaryObject( COSName.AS );
-        if( radioValue != null && fieldValue != null && radioValue.getName().equals( onValue ) )
-        {
-            return true;
-        }
-
-        return false;
+        return getValue().compareTo(getOnValue()) == 0;
     }
 
     /**
      * Checks the check box.
+     * 
+     * @throws IOException if the appearance couldn't be generated.
      */
-    public void check()
+    public void check() throws IOException
     {
-        String onValue = getOnValue();
-        setValue(onValue);
-        getDictionary().setItem(COSName.AS, COSName.getPDFName(onValue));
+        setValue(getOnValue());
     }
 
     /**
      * Unchecks the check box.
+     * 
+     * @throws IOException if the appearance couldn't be generated.
      */
-    public void unCheck()
+    public void unCheck() throws IOException
     {
-        getDictionary().setItem(COSName.AS, PDButton.OFF);
+        setValue(COSName.Off.getName());
     }
 
     /**
-     * This will get the value assigned to the OFF state.
-     *
-     * @return The value of the check box.
+     * Returns the fields value entry.
+     * 
+     * @return the fields value entry.
      */
-    public String getOffValue()
+    public String getValue()
     {
-        return PDButton.OFF.getName();
-    }
-
-    /**
-     * This will get the value assigned to the ON state.
-     *
-     * @return The value of the check box.
-     */
-    public String getOnValue()
-    {
-        COSDictionary ap = (COSDictionary) getDictionary().getDictionaryObject(COSName.AP);
-        COSBase n = ap.getDictionaryObject(COSName.N);
-
-        //N can be a COSDictionary or a COSStream
-        if( n instanceof COSDictionary )
+        // the dictionary shall be a name object but it might not be
+        // so don't assume it is.
+        COSBase value = getInheritableAttribute(COSName.V);
+        if (value instanceof COSName)
         {
-            for( COSName key :((COSDictionary)n).keySet() )
-            {
-                if( !key.equals( PDButton.OFF) )
-                {
-                    return key.getName();
-                }
-            }
+            return ((COSName)value).getName();
         }
-        return "";
-    }
-
-    @Override
-    public String getValue() throws IOException
-    {
-        COSBase attribute = getInheritableAttribute(COSName.V);
-
-        if (attribute == null)
+        else
         {
             return "";
         }
-        else if (attribute instanceof COSName)
+    }
+
+    /**
+     * Returns the default value, if any.
+     *
+     * @return the fields default value.
+     */
+    public String getDefaultValue()
+    {
+        // the dictionary shall be a name object but it might not be
+        // so don't assume it is.
+        COSBase value = getInheritableAttribute(COSName.DV);
+        if (value instanceof COSName)
         {
-            return ((COSName) attribute).getName();
+            return ((COSName)value).getName();
         }
         else
         {
-            throw new IOException("Expected a COSName entry but got " + attribute.getClass().getName());
+            return "";
+        }
+    }
+
+    @Override
+    public String getValueAsString()
+    {
+        return getValue();
+    }
+
+    /**
+     * Sets the checked value of this field.
+     * 
+     * <p>To retrieve the potential On value use {@link #getOnValue()} or
+     * {@link #getOnValues()}. The Off value shall always be 'Off'.</p>
+     *
+     * @param value matching the On or Off state of the checkbox.
+     * @throws IOException if the appearance couldn't be generated.
+     * @throws IllegalArgumentException if the value is not a valid option for the checkbox.
+     */
+    public void setValue(String value) throws IOException
+    {
+        if (value.compareTo(getOnValue()) != 0 && value.compareTo(COSName.Off.getName()) != 0)
+        {
+            throw new IllegalArgumentException(value + " is not a valid option for the checkbox " + getFullyQualifiedName());
+        }
+        else
+        {
+            // Update the field value and the appearance state.
+            // Both are necessary to work properly with different viewers.
+            COSName name = COSName.getPDFName(value);
+            dictionary.setItem(COSName.V, name);
+            dictionary.setItem(COSName.AS, name);
+        }
+        
+        applyChange();
+    }
+
+    /**
+     * Sets the default value.
+     *
+     * @see #setValue(String)
+     * @param value matching the On or Off state of the checkbox.
+     */
+    public void setDefaultValue(String value)
+    {
+        if (value.compareTo(getOnValue()) != 0 && value.compareTo(COSName.Off.getName()) != 0)
+        {
+            throw new IllegalArgumentException(value + " is not a valid option for the checkbox " + getFullyQualifiedName());
+        }
+        else
+        {
+            dictionary.setName(COSName.DV, value);
         }
     }
 
     /**
-     * Set the field value.
+     * Get the value which sets the check box to the On state.
      * 
-     * The field value holds a name object which is corresponding to the 
-     * appearance state representing the corresponding appearance 
-     * from the appearance directory.
+     * <p>The On value should be 'Yes' but other values are possible
+     * so we need to look for that. On the other hand the Off value shall
+     * always be 'Off'. If not set or not part of the normal appearance keys
+     * 'Off' is the default</p>
      *
-     * The default value is Off.
-     * 
-     * @param value the new field value value.
+     * @return the value setting the check box to the On state. 
+     *          If an empty string is returned there is no appearance definition.
      */
-    public void setValue(String value)
+    public String getOnValue()
     {
-        if (value == null)
+        PDAnnotationWidget widget = this.getWidgets().get(0);
+        PDAppearanceDictionary apDictionary = widget.getAppearance();
+        
+        String onValue = "";
+        if (apDictionary != null) 
         {
-            getDictionary().removeItem(COSName.V);
-            getDictionary().setItem( COSName.AS, PDButton.OFF );
+            PDAppearanceEntry normalAppearance = apDictionary.getNormalAppearance();
+            if (normalAppearance != null)
+            {
+                Set<COSName> entries = normalAppearance.getSubDictionary().keySet();
+                for (COSName entry : entries)
+                {
+                    if (COSName.Off.compareTo(entry) != 0)
+                    {
+                        onValue = entry.getName();
+                    }
+                }
+            }
+        }
+        return onValue;
+    }
+    
+    /**
+     * Get the values which sets the check box to the On state.
+     * 
+     * <p>This is a convenience function to provide a similar method to 
+     * {@link PDRadioButton} </p>
+     *
+     * @see #getOnValue()
+     * @return the value setting the check box to the On state. 
+     *          If an empty List is returned there is no appearance definition.
+     */
+    public List<String> getOnValues()
+    {
+        String onValue = getOnValue();
+        
+        if (onValue.isEmpty())
+        {
+            return Collections.emptyList();
         }
         else
         {
-            COSName nameValue = COSName.getPDFName(value);
-            getDictionary().setItem(COSName.V, nameValue);
-            getDictionary().setItem( COSName.AS, nameValue);
+            ArrayList<String> onValues = new ArrayList<String>();
+            onValues.add(onValue);
+            return onValues;
         }
     }
+    
 }

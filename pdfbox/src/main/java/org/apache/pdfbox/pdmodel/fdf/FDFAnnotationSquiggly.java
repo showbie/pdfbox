@@ -27,12 +27,12 @@ import org.w3c.dom.Element;
  *
  * @author Ben Litchfield
  */
-public class FDFAnnotationSquiggly extends FDFAnnotation
+public class FDFAnnotationSquiggly extends FDFAnnotationTextMarkup
 {
     /**
      * COS Model value for SubType entry.
      */
-    public static final String SUBTYPE ="Squiggly";
+    public static final String SUBTYPE = "Squiggly";
 
     /**
      * Default constructor.
@@ -40,7 +40,7 @@ public class FDFAnnotationSquiggly extends FDFAnnotation
     public FDFAnnotationSquiggly()
     {
         super();
-        annot.setName( COSName.SUBTYPE, SUBTYPE );
+        annot.setName(COSName.SUBTYPE, SUBTYPE);
     }
 
     /**
@@ -48,21 +48,21 @@ public class FDFAnnotationSquiggly extends FDFAnnotation
      *
      * @param a An existing FDF Annotation.
      */
-    public FDFAnnotationSquiggly( COSDictionary a )
+    public FDFAnnotationSquiggly(COSDictionary a)
     {
-        super( a );
+        super(a);
     }
 
     /**
      * Constructor.
      *
-     *  @param element An XFDF element.
+     * @param element An XFDF element.
      *
-     *  @throws IOException If there is an error extracting information from the element.
+     * @throws IOException If there is an error extracting information from the element.
      */
-    public FDFAnnotationSquiggly( Element element ) throws IOException
+    public FDFAnnotationSquiggly(Element element) throws IOException
     {
-        super( element );
-        annot.setName( COSName.SUBTYPE, SUBTYPE );
+        super(element);
+        annot.setName(COSName.SUBTYPE, SUBTYPE);
     }
 }

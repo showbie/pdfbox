@@ -17,13 +17,6 @@
 
 package org.apache.fontbox.type1;
 
-import org.apache.fontbox.cff.Type1CharString;
-import org.apache.fontbox.cff.Type1CharStringParser;
-import org.apache.fontbox.encoding.Encoding;
-import org.apache.fontbox.pfb.PfbParser;
-import org.apache.fontbox.ttf.Type1Equivalent;
-import org.apache.fontbox.util.BoundingBox;
-
 import java.awt.geom.GeneralPath;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,13 +26,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.apache.fontbox.FontBoxFont;
+import org.apache.fontbox.EncodedFont;
+import org.apache.fontbox.cff.Type1CharString;
+import org.apache.fontbox.cff.Type1CharStringParser;
+import org.apache.fontbox.encoding.Encoding;
+import org.apache.fontbox.pfb.PfbParser;
+import org.apache.fontbox.util.BoundingBox;
 
 /**
  * Represents an Adobe Type 1 (.pfb) font. Thread safe.
  *
  * @author John Hewson
  */
-public final class Type1Font implements Type1CharStringReader, Type1Equivalent
+public final class Type1Font implements Type1CharStringReader, EncodedFont, FontBoxFont
 {
     /**
      * Constructs a new Type1Font object from a .pfb stream.
@@ -128,12 +128,17 @@ public final class Type1Font implements Type1CharStringReader, Type1Equivalent
     // private caches
     private final Map<String, Type1CharString> charStringCache =
             new ConcurrentHashMap<String, Type1CharString>();
+    
+    // raw data
+    private final byte[] segment1, segment2;
 
     /**
      * Constructs a new Type1Font, called by Type1Parser.
      */
-    Type1Font()
+    Type1Font(byte[] segment1, byte[] segment2)
     {
+        this.segment1 = segment1;
+        this.segment2 = segment2;
     }
 
     /**
@@ -514,6 +519,26 @@ public final class Type1Font implements Type1CharStringReader, Type1Equivalent
     public int getLanguageGroup()
     {
         return languageGroup;
+    }
+
+    /**
+     * Returns the ASCII segment.
+     *
+     * @return the ASCII segment.
+     */
+    public byte[] getASCIISegment()
+    {
+        return segment1;
+    }
+
+    /**
+     * Returns the binary segment.
+     *
+     * @return the binary segment.
+     */
+    public byte[] getBinarySegment()
+    {
+        return segment2;
     }
 
     /**

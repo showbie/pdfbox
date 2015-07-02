@@ -17,11 +17,13 @@
 package org.apache.pdfbox.pdmodel.interactive.digitalsignature;
 
 import java.io.Closeable;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
 import org.apache.pdfbox.cos.COSDocument;
-import org.apache.pdfbox.pdfparser.VisualSignatureParser;
+import org.apache.pdfbox.io.RandomAccessBufferedFileInputStream;
+import org.apache.pdfbox.pdfparser.PDFParser;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.visible.PDVisibleSigProperties;
 
 /**
@@ -62,6 +64,19 @@ public class SignatureOptions implements Closeable
     }
   
     /**
+     * Reads the visual signature from the given file.
+     *  
+     * @param file the file containing the visual signature
+     * @throws IOException when something went wrong during parsing 
+     */
+    public void setVisualSignature(File file) throws IOException
+    { 
+        PDFParser parser = new PDFParser(new RandomAccessBufferedFileInputStream(file));
+        parser.parse();
+        visualSignature = parser.getDocument();
+    }
+    
+    /**
      * Reads the visual signature from the given input stream.
      *  
      * @param is the input stream containing the visual signature
@@ -69,9 +84,9 @@ public class SignatureOptions implements Closeable
      */
     public void setVisualSignature(InputStream is) throws IOException
     { 
-        VisualSignatureParser visParser = new VisualSignatureParser(is);
-        visParser.parse();
-        visualSignature = visParser.getDocument();
+        PDFParser parser = new PDFParser(new RandomAccessBufferedFileInputStream(is));
+        parser.parse();
+        visualSignature = parser.getDocument();
     }
     
     /**
@@ -124,6 +139,7 @@ public class SignatureOptions implements Closeable
      *
      * @throws IOException if the document could not be closed
      */
+    @Override
     public void close() throws IOException
     {
         if (visualSignature != null)

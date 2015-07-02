@@ -125,7 +125,7 @@ public abstract class PDAttributeObject extends PDDictionaryWrapper
      */
     public String getOwner()
     {
-        return this.getCOSDictionary().getNameAsString(COSName.O);
+        return this.getCOSObject().getNameAsString(COSName.O);
     }
 
     /**
@@ -135,7 +135,7 @@ public abstract class PDAttributeObject extends PDDictionaryWrapper
      */
     protected void setOwner(String owner)
     {
-        this.getCOSDictionary().setName(COSName.O, owner);
+        this.getCOSObject().setName(COSName.O, owner);
     }
 
     /**
@@ -147,7 +147,7 @@ public abstract class PDAttributeObject extends PDDictionaryWrapper
     public boolean isEmpty()
     {
         // only entry is the owner?
-        return (this.getCOSDictionary().size() == 1) && (this.getOwner() != null);
+        return (this.getCOSObject().size() == 1) && (this.getOwner() != null);
     }
 
 
@@ -159,7 +159,7 @@ public abstract class PDAttributeObject extends PDDictionaryWrapper
      */
     protected void potentiallyNotifyChanged(COSBase oldBase, COSBase newBase)
     {
-        if (PDAttributeObject.isValueChanged(oldBase, newBase))
+        if (this.isValueChanged(oldBase, newBase))
         {
             this.notifyChanged();
         }
@@ -173,7 +173,7 @@ public abstract class PDAttributeObject extends PDDictionaryWrapper
      * @return <code>true</code> if the value is changed, <code>false</code>
      * otherwise
      */
-    private static boolean isValueChanged(COSBase oldValue, COSBase newValue)
+    private boolean isValueChanged(COSBase oldValue, COSBase newValue)
     {
         if (oldValue == null)
         {

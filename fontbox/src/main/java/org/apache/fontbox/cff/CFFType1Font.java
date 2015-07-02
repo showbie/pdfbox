@@ -16,15 +16,14 @@
  */
 package org.apache.fontbox.cff;
 
-import org.apache.fontbox.ttf.Type1Equivalent;
-import org.apache.fontbox.type1.Type1CharStringReader;
-
 import java.awt.geom.GeneralPath;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.apache.fontbox.EncodedFont;
+import org.apache.fontbox.type1.Type1CharStringReader;
 
 /**
  * A Type 1-equivalent font program represented in a CFF file. Thread safe.
@@ -32,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author Villu Ruusmann
  * @author John Hewson
  */
-public class CFFType1Font extends CFFFont implements Type1Equivalent
+public class CFFType1Font extends CFFFont implements EncodedFont
 {
     private final Map<String, Object> privateDict = new LinkedHashMap<String, Object>();
     private CFFEncoding encoding;
@@ -89,12 +88,24 @@ public class CFFType1Font extends CFFFont implements Type1Equivalent
      */
     public Type1CharString getType1CharString(String name) throws IOException
     {
-        // some fonts have glyphs beyond their encoding, so we look up by charset SID
-        int sid = charset.getSID(name);
-        int gid = charset.getGIDForSID(sid);
+        // lookup via charset
+        int gid = nameToGID(name);
 
         // lookup in CharStrings INDEX
         return getType2CharString(gid, name);
+    }
+
+    /**
+     * Returns the GID for the given PostScript glyph name.
+     * 
+     * @param name a PostScript glyph name.
+     * @return GID
+     */
+    public int nameToGID(String name)
+    {
+        // some fonts have glyphs beyond their encoding, so we look up by charset SID
+        int sid = charset.getSID(name);
+        return charset.getGIDForSID(sid);
     }
 
     /**

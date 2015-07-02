@@ -17,7 +17,7 @@
 
 package org.apache.fontbox.type1;
 
-import org.apache.fontbox.encoding.CustomEncoding;
+import org.apache.fontbox.encoding.BuiltInEncoding;
 import org.apache.fontbox.encoding.StandardEncoding;
 
 import java.io.IOException;
@@ -57,7 +57,7 @@ final class Type1Parser
      */
     public Type1Font parse(byte[] segment1, byte[] segment2) throws IOException
     {
-        font = new Type1Font();
+        font = new Type1Font(segment1, segment2);
         parseASCII(segment1);
         if (segment2.length > 0)
         {
@@ -221,7 +221,7 @@ final class Type1Parser
                 read(Token.NAME, "put");
                 codeToName.put(code, name);
             }
-            font.encoding = new CustomEncoding(codeToName);
+            font.encoding = new BuiltInEncoding(codeToName);
             readMaybe(Token.NAME, "readonly");
             read(Token.NAME, "def");
         }

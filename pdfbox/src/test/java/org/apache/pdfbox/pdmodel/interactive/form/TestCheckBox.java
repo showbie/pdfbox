@@ -81,33 +81,32 @@ public class TestCheckBox extends TestCase
             
             // test that there are no nulls returned for an empty field
             // only specific methods are tested here
-            assertNotNull(checkBox.getDefaultValue());
-            assertNotNull(checkBox.getOptions());
+            assertNotNull(checkBox.getExportValues());
             assertNotNull(checkBox.getValue());
             
             // Test setting/getting option values - the dictionaries Opt entry
             List<String> options = new ArrayList<String>();
             options.add("Value01");
             options.add("Value02");
-            checkBox.setOptions(options);
+            checkBox.setExportValues(options);
 
-            COSArray optItem = (COSArray) checkBox.getDictionary().getItem(COSName.OPT);
+            COSArray optItem = (COSArray) checkBox.getCOSObject().getItem(COSName.OPT);
 
             // assert that the values have been correctly set
-            assertNotNull(checkBox.getDictionary().getItem(COSName.OPT));
+            assertNotNull(checkBox.getCOSObject().getItem(COSName.OPT));
             assertEquals(optItem.size(),2);
             assertEquals(options.get(0), optItem.getString(0));
             
             // assert that the values can be retrieved correctly
-            List<String> retrievedOptions = checkBox.getOptions();
+            List<String> retrievedOptions = checkBox.getExportValues();
             assertEquals(retrievedOptions.size(),2);
             assertEquals(retrievedOptions, options);
 
             // assert that the Opt entry is removed
-            checkBox.setOptions(null);
-            assertNull(checkBox.getDictionary().getItem(COSName.OPT));
+            checkBox.setExportValues(null);
+            assertNull(checkBox.getCOSObject().getItem(COSName.OPT));
             // if there is no Opt entry an empty List shall be returned
-            assertEquals(checkBox.getOptions(), new ArrayList<String>());
+            assertEquals(checkBox.getExportValues(), new ArrayList<String>());
         }
         finally
         {

@@ -16,7 +16,6 @@
  */
 package org.apache.pdfbox.pdmodel.interactive.annotation;
 
-import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 
 import org.apache.pdfbox.pdmodel.common.COSObjectable;
@@ -30,8 +29,7 @@ public class PDBorderEffectDictionary implements COSObjectable
 {
 
     /*
-     * The various values of the effect applied to the border as defined in the
-     * PDF 1.6 reference Table 8.14
+     * The various values of the effect applied to the border as defined in the PDF 1.6 reference Table 8.14
      */
 
     /**
@@ -44,7 +42,7 @@ public class PDBorderEffectDictionary implements COSObjectable
      */
     public static final String STYLE_CLOUDY = "C";
 
-    private COSDictionary dictionary;
+    private final COSDictionary dictionary;
 
     /**
      * Constructor.
@@ -57,10 +55,9 @@ public class PDBorderEffectDictionary implements COSObjectable
     /**
      * Constructor.
      *
-     * @param dict
-     *            a border style dictionary.
+     * @param dict a border style dictionary.
      */
-    public PDBorderEffectDictionary( COSDictionary dict )
+    public PDBorderEffectDictionary(COSDictionary dict)
     {
         dictionary = dict;
     }
@@ -70,17 +67,8 @@ public class PDBorderEffectDictionary implements COSObjectable
      *
      * @return the dictionary
      */
-    public COSDictionary getDictionary()
-    {
-        return dictionary;
-    }
-
-    /**
-     * returns the dictionary.
-     *
-     * @return the dictionary
-     */
-    public COSBase getCOSObject()
+    @Override
+    public COSDictionary getCOSObject()
     {
         return dictionary;
     }
@@ -88,12 +76,11 @@ public class PDBorderEffectDictionary implements COSObjectable
     /**
      * This will set the intensity of the applied effect.
      *
-     * @param i
-     *            the intensity of the effect values 0 to 2
+     * @param i the intensity of the effect values 0 to 2
      */
-    public void setIntensity( float i )
+    public void setIntensity(float i)
     {
-        getDictionary().setFloat( "I", i );
+        getCOSObject().setFloat("I", i);
     }
 
     /**
@@ -103,29 +90,27 @@ public class PDBorderEffectDictionary implements COSObjectable
      */
     public float getIntensity()
     {
-        return getDictionary().getFloat( "I", 0 );
+        return getCOSObject().getFloat("I", 0);
     }
 
     /**
      * This will set the border effect, see the STYLE_* constants for valid values.
      *
-     * @param s
-     *            the border effect to use
+     * @param s the border effect to use
      */
-    public void setStyle( String s )
+    public void setStyle(String s)
     {
-        getDictionary().setName( "S", s );
+        getCOSObject().setName("S", s);
     }
 
     /**
-     * This will retrieve the border effect, see the STYLE_* constants for valid
-     * values.
+     * This will retrieve the border effect, see the STYLE_* constants for valid values.
      *
      * @return the effect of the border
      */
     public String getStyle()
     {
-        return getDictionary().getNameAsString( "S", STYLE_SOLID );
+        return getCOSObject().getNameAsString("S", STYLE_SOLID);
     }
 
 }

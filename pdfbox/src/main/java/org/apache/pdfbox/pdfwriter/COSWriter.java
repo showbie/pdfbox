@@ -702,7 +702,7 @@ public class COSWriter implements ICOSVisitor, Closeable
         byte[] buffer = byteOut.toByteArray();
 
         // overwrite the ByteRange in the buffer
-        byte[] byteRangeBytes = byteRange.getBytes();
+        byte[] byteRangeBytes = byteRange.getBytes(Charsets.ISO_8859_1);
         for (int i = 0; i < byteRangeLength; i++)
         {
             if (i >= byteRangeBytes.length)
@@ -738,7 +738,7 @@ public class COSWriter implements ICOSVisitor, Closeable
         }
 
         // overwrite the signature Contents in the buffer
-        byte[] signatureBytes = signature.getBytes();
+        byte[] signatureBytes = signature.getBytes(Charsets.ISO_8859_1);
         System.arraycopy(signatureBytes, 0, buffer, bufSignatureOffset + 1, signatureBytes.length);
 
         // write the data to the incremental output stream
@@ -748,9 +748,9 @@ public class COSWriter implements ICOSVisitor, Closeable
     
     private void writeXrefRange(long x, long y) throws IOException
     {
-        getStandardOutput().write(String.valueOf(x).getBytes());
+        getStandardOutput().write(String.valueOf(x).getBytes(Charsets.ISO_8859_1));
         getStandardOutput().write(SPACE);
-        getStandardOutput().write(String.valueOf(y).getBytes());
+        getStandardOutput().write(String.valueOf(y).getBytes(Charsets.ISO_8859_1));
         getStandardOutput().writeEOL();
     }
 
@@ -1089,7 +1089,7 @@ public class COSWriter implements ICOSVisitor, Closeable
     @Override
     public Object visitFromNull(COSNull obj) throws IOException
     {
-        COSNull.writePDF(getStandardOutput());
+        obj.writePDF(getStandardOutput());
         return null;
     }
 
@@ -1222,6 +1222,8 @@ public class COSWriter implements ICOSVisitor, Closeable
      * @param signInterface class to be used for signing 
      *
      * @throws IOException If an error occurs while generating the data.
+     * @throws IllegalStateException If the document has an encryption dictionary but no protection
+     * policy.
      */
     public void write(PDDocument doc, SignatureInterface signInterface) throws IOException
     {
@@ -1251,6 +1253,11 @@ public class COSWriter implements ICOSVisitor, Closeable
             if (pdDocument.getEncryption() != null)
             {
                 SecurityHandler securityHandler = pdDocument.getEncryption().getSecurityHandler();
+                if (!securityHandler.hasProtectionPolicy())
+                {
+                    throw new IllegalStateException("PDF contains an encryption dictionary, please remove it with "
+                            + "setAllSecurityToBeRemoved() or set a protection policy with protect()");
+                }
                 securityHandler.prepareDocumentForEncryption(pdDocument);
                 willEncrypt = true;
             }

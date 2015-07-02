@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.pdfbox.cos.COSArray;
-import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.common.COSArrayList;
@@ -33,7 +32,7 @@ import org.apache.pdfbox.pdmodel.common.COSObjectable;
  */
 public class FDFPage implements COSObjectable
 {
-    private COSDictionary page;
+    private final COSDictionary page;
 
     /**
      * Default constructor.
@@ -48,7 +47,7 @@ public class FDFPage implements COSObjectable
      *
      * @param p The FDF page.
      */
-    public FDFPage( COSDictionary p )
+    public FDFPage(COSDictionary p)
     {
         page = p;
     }
@@ -58,39 +57,29 @@ public class FDFPage implements COSObjectable
      *
      * @return The cos object that matches this Java object.
      */
-    public COSBase getCOSObject()
+    @Override
+    public COSDictionary getCOSObject()
     {
         return page;
     }
 
     /**
-     * Convert this standard java object to a COS object.
-     *
-     * @return The cos object that matches this Java object.
-     */
-    public COSDictionary getCOSDictionary()
-    {
-        return page;
-    }
-
-    /**
-     * This will get a list of FDFTemplage objects that describe the named pages
-     * that serve as templates.
+     * This will get a list of FDFTemplage objects that describe the named pages that serve as templates.
      *
      * @return A list of templates.
      */
     public List<FDFTemplate> getTemplates()
     {
         List<FDFTemplate> retval = null;
-        COSArray array = (COSArray)page.getDictionaryObject( COSName.TEMPLATES );
-        if( array != null )
+        COSArray array = (COSArray) page.getDictionaryObject(COSName.TEMPLATES);
+        if (array != null)
         {
             List<FDFTemplate> objects = new ArrayList<FDFTemplate>();
-            for( int i=0; i<array.size(); i++ )
+            for (int i = 0; i < array.size(); i++)
             {
-                objects.add( new FDFTemplate( (COSDictionary)array.getObject( i ) ) );
+                objects.add(new FDFTemplate((COSDictionary) array.getObject(i)));
             }
-            retval = new COSArrayList<FDFTemplate>( objects, array );
+            retval = new COSArrayList<FDFTemplate>(objects, array);
         }
         return retval;
     }
@@ -100,9 +89,9 @@ public class FDFPage implements COSObjectable
      *
      * @param templates A list of templates for this Page.
      */
-    public void setTemplates( List<FDFTemplate> templates )
+    public void setTemplates(List<FDFTemplate> templates)
     {
-        page.setItem( COSName.TEMPLATES, COSArrayList.converterToCOSArray( templates ) );
+        page.setItem(COSName.TEMPLATES, COSArrayList.converterToCOSArray(templates));
     }
 
     /**
@@ -113,10 +102,10 @@ public class FDFPage implements COSObjectable
     public FDFPageInfo getPageInfo()
     {
         FDFPageInfo retval = null;
-        COSDictionary dict = (COSDictionary)page.getDictionaryObject( COSName.INFO );
-        if( dict != null )
+        COSDictionary dict = (COSDictionary) page.getDictionaryObject(COSName.INFO);
+        if (dict != null)
         {
-            retval = new FDFPageInfo( dict );
+            retval = new FDFPageInfo(dict);
         }
         return retval;
     }
@@ -126,8 +115,8 @@ public class FDFPage implements COSObjectable
      *
      * @param info The new page info dictionary.
      */
-    public void setPageInfo( FDFPageInfo info )
+    public void setPageInfo(FDFPageInfo info)
     {
-        page.setItem( COSName.INFO, info );
+        page.setItem(COSName.INFO, info);
     }
 }

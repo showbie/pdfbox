@@ -52,6 +52,8 @@ import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.PDInlineImage;
 import org.apache.pdfbox.pdmodel.graphics.shading.PDShading;
+import org.apache.pdfbox.pdmodel.graphics.state.PDExtendedGraphicsState;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceStream;
 import org.apache.pdfbox.util.Charsets;
 import org.apache.pdfbox.util.Matrix;
 
@@ -207,6 +209,44 @@ public final class PDPageContentStream implements Closeable
             resources = new PDResources();
             sourcePage.setResources(resources);
         }
+    }
+
+    /**
+     * Create a new appearance stream. Note that this is not actually a "page" content stream.
+     *
+     * @param doc The document the page is part of.
+     * @param appearance The appearance stream to write to.
+     * @throws IOException If there is an error writing to the page contents.
+     */
+    public PDPageContentStream(PDDocument doc, PDAppearanceStream appearance) throws IOException
+    {
+        this.document = doc;
+        
+        output = appearance.getPDStream().createOutputStream();
+        this.resources = appearance.getResources();
+        
+        formatDecimal.setMaximumFractionDigits(4);
+        formatDecimal.setGroupingUsed(false);
+    }
+    
+    /**
+     * Create a new appearance stream. Note that this is not actually a "page" content stream.
+     *
+     * @param doc The document the appearance is part of.
+     * @param appearance The appearance stream to add to.
+     * @param outputStream The appearances output stream to write to.
+     * @throws IOException If there is an error writing to the page contents.
+     */
+    public PDPageContentStream(PDDocument doc, PDAppearanceStream appearance, OutputStream outputStream)
+            throws IOException
+    {
+        this.document = doc;
+        
+        output = outputStream;
+        this.resources = appearance.getResources();
+        
+        formatDecimal.setMaximumFractionDigits(4);
+        formatDecimal.setGroupingUsed(false);
     }
 
     /**
@@ -2020,6 +2060,18 @@ public final class PDPageContentStream implements Closeable
     public void appendCOSName(COSName name) throws IOException
     {
         name.writePDF(output);
+    }
+    
+    /**
+     * Set an extended graphics state.
+     * 
+     * @param state The extended graphics state.
+     * @throws IOException If the content stream could not be written.
+     */
+    public void setGraphicsStateParameters(PDExtendedGraphicsState state) throws IOException
+    {
+        writeOperand(resources.add(state));
+        writeOperator("gs");
     }
 
     /**

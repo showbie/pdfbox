@@ -16,11 +16,13 @@
  */
 package org.apache.fontbox.cff;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.fontbox.FontBoxFont;
 import org.apache.fontbox.util.BoundingBox;
 
 /**
@@ -29,13 +31,14 @@ import org.apache.fontbox.util.BoundingBox;
  * @author Villu Ruusmann
  * @author John Hewson
  */
-public abstract class CFFFont
+public abstract class CFFFont implements FontBoxFont
 {
     protected String fontName;
     protected final Map<String, Object> topDict = new LinkedHashMap<String, Object>();
     protected CFFCharset charset;
     protected final List<byte[]> charStrings = new ArrayList<byte[]>();
     protected IndexData globalSubrIndex;
+    private byte[] data;
 
     /**
      * The name of the font.
@@ -126,6 +129,26 @@ public abstract class CFFFont
     }
 
     /**
+     * Sets the original data.
+     *
+     * @param data the original data.
+     */
+    void setData(byte[] data)
+    {
+        this.data = data;
+    }
+
+    /**
+     * Returns the the original data.
+     *
+     * @return the dictionary
+     */
+    public byte[] getData()
+    {
+        return data;
+    }
+    
+    /**
      * Returns the number of charstrings in the font.
      */
     public int getNumCharStrings()
@@ -152,6 +175,14 @@ public abstract class CFFFont
     {
         return globalSubrIndex;
     }
+
+    /**
+     * Returns the Type 2 charstring for the given CID.
+     *
+     * @param cidOrGid CID for CIFFont, or GID for Type 1 font
+     * @throws IOException if the charstring could not be read
+     */
+    public abstract Type2CharString getType2CharString(int cidOrGid) throws IOException;
 
     @Override
     public String toString()

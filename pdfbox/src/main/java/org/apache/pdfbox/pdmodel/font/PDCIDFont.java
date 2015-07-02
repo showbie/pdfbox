@@ -38,7 +38,7 @@ import org.apache.pdfbox.util.Vector;
  *
  * @author Ben Litchfield
  */
-public abstract class PDCIDFont implements COSObjectable, PDFontLike
+public abstract class PDCIDFont implements COSObjectable, PDFontLike, PDVectorFont
 {
     protected final PDType0Font parent;
 
@@ -374,6 +374,23 @@ public abstract class PDCIDFont implements COSObjectable, PDFontLike
         return average;
     }
 
+    /**
+     * Returns the CIDSystemInfo, or null if it is missing (which isn't allowed but could happen).
+     */
+    public PDCIDSystemInfo getCIDSystemInfo()
+    {
+        COSDictionary cidSystemInfoDict = (COSDictionary)
+                dict.getDictionaryObject(COSName.CIDSYSTEMINFO);
+
+        PDCIDSystemInfo cidSystemInfo = null;
+        if (cidSystemInfoDict != null)
+        {
+            cidSystemInfo = new PDCIDSystemInfo(cidSystemInfoDict);
+        }
+
+        return cidSystemInfo;
+    }
+    
     /**
      * Returns the CID for the given character code. If not found then CID 0 is returned.
      *

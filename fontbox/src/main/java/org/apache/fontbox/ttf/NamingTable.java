@@ -35,14 +35,19 @@ public class NamingTable extends TTFTable
      */
     public static final String TAG = "name";
     
-    private List<NameRecord> nameRecords = new ArrayList<NameRecord>();
+    private final List<NameRecord> nameRecords = new ArrayList<NameRecord>();
 
-    private Map<Integer, Map<Integer, Map<Integer, Map<Integer, String>>>> lookupTable =
+    private final Map<Integer, Map<Integer, Map<Integer, Map<Integer, String>>>> lookupTable =
             new HashMap<Integer, Map<Integer, Map<Integer, Map<Integer, String>>>>();
 
     private String fontFamily = null;
     private String fontSubFamily = null;
     private String psName = null;
+
+    NamingTable(TrueTypeFont font)
+    {
+        super(font);
+    }
 
     /**
      * This will read the required data from the stream.

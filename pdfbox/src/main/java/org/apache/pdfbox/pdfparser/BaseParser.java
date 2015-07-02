@@ -16,14 +16,8 @@
  */
 package org.apache.pdfbox.pdfparser;
 
-import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.Closeable;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.regex.Pattern;
-
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.pdfbox.cos.COSArray;
@@ -36,11 +30,13 @@ import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSNull;
 import org.apache.pdfbox.cos.COSNumber;
 import org.apache.pdfbox.cos.COSObject;
+import org.apache.pdfbox.cos.COSObjectKey;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.cos.COSString;
-import org.apache.pdfbox.io.IOUtils;
-import org.apache.pdfbox.io.PushBackInputStream;
-import org.apache.pdfbox.cos.COSObjectKey;
+import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.util.Charsets;
+
+
 import static org.apache.pdfbox.util.Charsets.ISO_8859_1;
 
 /**
@@ -49,7 +45,7 @@ import static org.apache.pdfbox.util.Charsets.ISO_8859_1;
  *
  * @author Ben Litchfield
  */
-public abstract class BaseParser implements Closeable
+public abstract class BaseParser
 {
 
     private static final long OBJECT_NUMBER_THRESHOLD = 10000000000L;
@@ -66,34 +62,19 @@ public abstract class BaseParser implements Closeable
      */
     private static final Log LOG = LogFactory.getLog(BaseParser.class);
 
-    private static final int E = 'e';
-    private static final int N = 'n';
-    private static final int D = 'd';
+    protected static final int E = 'e';
+    protected static final int N = 'n';
+    protected static final int D = 'd';
 
-    private static final int S = 's';
-    private static final int T = 't';
-    private static final int R = 'r';
-    private static final int A = 'a';
-    private static final int M = 'm';
+    protected static final int S = 's';
+    protected static final int T = 't';
+    protected static final int R = 'r';
+    protected static final int A = 'a';
+    protected static final int M = 'm';
 
-    private static final int O = 'o';
-    private static final int B = 'b';
-    private static final int J = 'j';
-
-    private static final int STRMBUFLEN = 2048;
-    private final byte[] strmBuf    = new byte[ STRMBUFLEN ];
-
-    /**
-     * This is a byte array that will be used for comparisons.
-     */
-    public static final byte[] ENDSTREAM =
-        new byte[] { E, N, D, S, T, R, E, A, M };
-
-    /**
-     * This is a byte array that will be used for comparisons.
-     */
-    public static final byte[] ENDOBJ =
-        new byte[] { E, N, D, O, B, J };
+    protected static final int O = 'o';
+    protected static final int B = 'b';
+    protected static final int J = 'j';
 
     /**
      * This is a string constant that will be used for comparisons.
@@ -140,7 +121,7 @@ public abstract class BaseParser implements Closeable
     /**
      * This is the stream that will be read from.
      */
-    protected PushBackInputStream pdfSource;
+    protected RandomAccessRead pdfSource;
 
     /**
      * This is the document that will be parsed.
@@ -157,47 +138,28 @@ public abstract class BaseParser implements Closeable
     /**
      * Constructor.
      *
-     * @param input The input stream to read the data from.
+     * @param stream The COS stream to read the data from.
      * @throws IOException If there is an error reading the input stream.
      */
-    public BaseParser(InputStream input) throws IOException
+    public BaseParser(COSStream stream) throws IOException
     {
-        int pushbacksize = 65536;
-        try
-        {
-            pushbacksize = Integer.getInteger(PROP_PUSHBACK_SIZE, 65536);
-        }
-        catch (SecurityException e) 
-        {
-            // PDFBOX-1946 getInteger calls System.getProperties, 
-            // which can get exception in an applet
-            // ignore and use default
-        }
-        this.pdfSource = new PushBackInputStream(
-                new BufferedInputStream(input, 16384), pushbacksize);
-    }
-
-    /**
-     * Returns a new instance of a COSStream.
-     * 
-     * @param dictionary the dictionary belonging to the stream
-     * @return the new COSStream
-     */
-    protected final COSStream createCOSStream(COSDictionary dictionary)
-    {
-        if (document != null)
-        {
-            return document.createCOSStream(dictionary);
-        }
-        else
-        {
-            return null;
-        }
+        pdfSource = stream.getUnfilteredRandomAccess();
     }
     
+    /**
+     * Constructor.
+     *
+     * @param input The random access read to read the data from.
+     * @throws IOException If there is an error reading the input stream.
+     */
+    public BaseParser(RandomAccessRead input) throws IOException
+    {
+        pdfSource = input;
+    }
+
     private static boolean isHexDigit(char ch)
     {
-        return (ch >= ASCII_ZERO && ch <= ASCII_NINE) ||
+        return isDigit(ch) ||
         (ch >= 'a' && ch <= 'f') ||
         (ch >= 'A' && ch <= 'F');
     }
@@ -211,34 +173,38 @@ public abstract class BaseParser implements Closeable
      */
     private COSBase parseCOSDictionaryValue() throws IOException
     {
-        COSBase retval = null;
-        long numOffset = pdfSource.getOffset();
+        long numOffset = pdfSource.getPosition();
         COSBase number = parseDirObject();
         skipSpaces();
-        char next = (char)pdfSource.peek();
-        if( next >= ASCII_ZERO && next <= ASCII_NINE )
+        if (!isDigit())
         {
-            long genOffset = pdfSource.getOffset();
-            COSBase generationNumber = parseDirObject();
-            skipSpaces();
-            readExpectedChar('R');
-            if (!(number instanceof COSInteger))
-            {
-                throw new IOException("expected number, actual=" + number + " at offset " + numOffset);
-            }
-            if (!(generationNumber instanceof COSInteger))
-            {
-                throw new IOException("expected number, actual=" + number + " at offset " + genOffset);
-            }
-            COSObjectKey key = new COSObjectKey(((COSInteger) number).longValue(),
-                    ((COSInteger) generationNumber).intValue());
-            retval = document.getObjectFromPool(key);
+            return number;
         }
-        else
+        long genOffset = pdfSource.getPosition();
+        COSBase generationNumber = parseDirObject();
+        skipSpaces();
+        readExpectedChar('R');
+        if (!(number instanceof COSInteger))
         {
-            retval = number;
+            throw new IOException("expected number, actual=" + number + " at offset " + numOffset);
         }
-        return retval;
+        if (!(generationNumber instanceof COSInteger))
+        {
+            throw new IOException("expected number, actual=" + number + " at offset " + genOffset);
+        }
+        COSObjectKey key = new COSObjectKey(((COSInteger) number).longValue(),
+                ((COSInteger) generationNumber).intValue());
+        return getObjectFromPool(key);
+    }
+
+    private COSBase getObjectFromPool(COSObjectKey key) throws IOException
+    {
+        if (document == null)
+        {
+            throw new IOException("object reference " + key + " at offset " + pdfSource.getPosition()
+                    + " in content stream");
+        }
+        return document.getObjectFromPool(key);
     }
 
     /**
@@ -246,7 +212,7 @@ public abstract class BaseParser implements Closeable
      *
      * @return The parsed dictionary.
      *
-     * @throws IOException IF there is an error reading the stream.
+     * @throws IOException If there is an error reading the stream.
      */
     protected COSDictionary parseCOSDictionary() throws IOException
     {
@@ -255,84 +221,26 @@ public abstract class BaseParser implements Closeable
         skipSpaces();
         COSDictionary obj = new COSDictionary();
         boolean done = false;
-        while( !done )
+        while (!done)
         {
             skipSpaces();
-            char c = (char)pdfSource.peek();
-            if( c == '>')
+            char c = (char) pdfSource.peek();
+            if (c == '>')
             {
                 done = true;
             }
-            else
-                if(c != '/')
-                {
-                    //an invalid dictionary, we are expecting
-                    //the key, read until we can recover
-                    LOG.warn("Invalid dictionary, found: '" + c + "' but expected: '/'");
-                    int read = pdfSource.read();
-                    while(read != -1 && read != '/' && read != '>')
-                    {
-                        // in addition to stopping when we find / or >, we also want
-                        // to stop when we find endstream or endobj.
-                        if(read==E) 
-                        {
-                            read = pdfSource.read();
-                            if(read==N) 
-                            {
-                                read = pdfSource.read();
-                                if(read==D)
-                                {
-                                    read = pdfSource.read();
-                                    boolean isStream = read == S && pdfSource.read() == T && pdfSource.read() == R
-                                            && pdfSource.read() == E && pdfSource.read() == A && pdfSource.read() == M;
-
-                                    boolean isObj = !isStream && read == O && pdfSource.read() == B && pdfSource.read() == J;
-                                    if (isStream || isObj)
-                                    {
-                                        return obj; // we're done reading this object!
-                                    }
-                                }
-                            }
-                        }
-                        read = pdfSource.read();
-                    }
-                    if(read != -1)
-                    {
-                        pdfSource.unread(read);
-                    }
-                    else
-                    {
-                        return obj;
-                    }
-                }
+            else if (c == '/')
+            {
+                parseCOSDictionaryNameValuePair(obj);
+            }
             else
             {
-                COSName key = parseCOSName();
-                COSBase value = parseCOSDictionaryValue();
-                skipSpaces();
-                if( ((char)pdfSource.peek()) == 'd' )
+                // invalid dictionary, we were expecting a /Name, read until the end or until we can recover
+                LOG.warn("Invalid dictionary, found: '" + c + "' but expected: '/'");
+                if (readUntilEndOfCOSDictionary())
                 {
-                    //if the next string is 'def' then we are parsing a cmap stream
-                    //and want to ignore it, otherwise throw an exception.
-                    String potentialDEF = readString();
-                    if( !potentialDEF.equals( DEF ) )
-                    {
-                        pdfSource.unread( potentialDEF.getBytes(ISO_8859_1) );
-                    }
-                    else
-                    {
-                        skipSpaces();
-                    }
-                }
-
-                if( value == null )
-                {
-                    LOG.warn("Bad Dictionary Declaration " + pdfSource );
-                }
-                else
-                {
-                    value.setDirect(true);
-                    obj.setItem( key, value );
+                    // we couldn't recover
+                    return obj;
                 }
             }
         }
@@ -342,169 +250,80 @@ public abstract class BaseParser implements Closeable
     }
 
     /**
-     * This will read a COSStream from the input stream.
+     * Keep reading until the end of the dictionary object or the file has been hit, or until a '/'
+     * has been found.
      *
-     * @param dic The dictionary that goes with this stream.
+     * @return true if the end of the object or the file has been found, false if not, i.e. that the
+     * caller can continue to parse the dictionary at the current position.
      *
-     * @return The parsed pdf stream.
-     *
-     * @throws IOException If there is an error reading the stream.
+     * @throws IOException if there is a reading error.
      */
-    protected COSStream parseCOSStream( COSDictionary dic ) throws IOException
+    private boolean readUntilEndOfCOSDictionary() throws IOException
     {
-        COSStream stream = createCOSStream( dic );
-        OutputStream out = null;
-        try
+        int c = pdfSource.read();
+        while (c != -1 && c != '/' && c != '>')
         {
-            readExpectedString(STREAM_STRING);
-
-            skipWhiteSpaces();
-
-            // This needs to be dic.getItem because when we are parsing, the underlying object
-            // might still be null.
-            COSBase streamLength = dic.getItem(COSName.LENGTH);
-
-            //Need to keep track of the
-            out = stream.createFilteredStream( streamLength );
-
-            // try to read stream length - even if it is an indirect object
-            int length = -1;
-            if ( streamLength instanceof COSNumber )
+            // in addition to stopping when we find / or >, we also want
+            // to stop when we find endstream or endobj.
+            if (c == E)
             {
-                length = ( (COSNumber) streamLength).intValue();
+                c = pdfSource.read();
+                if (c == N)
+                {
+                    c = pdfSource.read();
+                    if (c == D)
+                    {
+                        c = pdfSource.read();
+                        boolean isStream = c == S && pdfSource.read() == T && pdfSource.read() == R
+                                && pdfSource.read() == E && pdfSource.read() == A && pdfSource.read() == M;
+                        boolean isObj = !isStream && c == O && pdfSource.read() == B && pdfSource.read() == J;
+                        if (isStream || isObj)
+                        {
+                            // we're done reading this object!
+                            return true;
+                        }
+                    }
+                }
             }
-            if ( length == -1 )
+            c = pdfSource.read();
+        }
+        if (c == -1)
+        {
+            return true;
+        }
+        pdfSource.rewind(1);
+        return false;
+    }
+
+    private void parseCOSDictionaryNameValuePair(COSDictionary obj) throws IOException
+    {
+        COSName key = parseCOSName();
+        COSBase value = parseCOSDictionaryValue();
+        skipSpaces();
+        if (((char) pdfSource.peek()) == 'd')
+        {
+            // if the next string is 'def' then we are parsing a cmap stream
+            // and want to ignore it, otherwise throw an exception.
+            String potentialDEF = readString();
+            if (!potentialDEF.equals(DEF))
             {
-                // Couldn't determine length from dict: just
-                // scan until we find endstream:
-                readUntilEndStream( new EndstreamOutputStream(out) );
+                pdfSource.rewind(potentialDEF.getBytes(ISO_8859_1).length);
             }
             else
             {
-                // Copy length bytes over:
-                int left = length;
-                while ( left > 0 )
-                {
-                    final int chunk = Math.min( left, STRMBUFLEN );
-                    final int readCount = pdfSource.read( strmBuf, 0, chunk );
-                    if ( readCount == -1 )
-                    {
-                        break;
-                    }
-                    out.write( strmBuf, 0, readCount );
-                    left -= readCount;
-                }
-                
-                // in order to handle broken documents we test if 'endstream' is reached
-                // if not, length value possibly was wrong, fall back to scanning for endstream
-                
-                // fill buffer with next bytes and test for 'endstream' (with leading whitespaces)
-                int readCount = pdfSource.read( strmBuf, 0, 20 );
-                if ( readCount > 0 )
-                {
-                    boolean foundEndstream    = false;
-                    int     nextEndstreamCIdx = 0;
-                    for ( int cIdx = 0; cIdx < readCount; cIdx++ )
-                    {
-                        final int ch = strmBuf[ cIdx ] & 0xff; 
-                        if ( ch == ENDSTREAM[ nextEndstreamCIdx ] )
-                        {
-                            if ( ++nextEndstreamCIdx >= ENDSTREAM.length )
-                            {
-                                foundEndstream = true;
-                                break;
-                            }
-                        }
-                        else if ( ( nextEndstreamCIdx > 0 ) || ( ! isWhitespace( ch ) ) )
-                        {
-                            // not found
-                            break;
-                        }
-                    }
-                    
-                    // push back test bytes
-                    pdfSource.unread( strmBuf, 0, readCount );
-                    
-                    // if 'endstream' was not found fall back to scanning
-                    if ( ! foundEndstream )
-                    {
-                        LOG.warn("Specified stream length " + length 
-                                + " is wrong. Fall back to reading stream until 'endstream'.");
-                        
-                        // push back all read stream bytes
-                        // we got a buffered stream wrapper around filteredStream thus first flush to underlying stream
-                        out.flush();
-                        InputStream writtenStreamBytes = stream.getFilteredStream();
-                        ByteArrayOutputStream bout = new ByteArrayOutputStream( length );
-
-                        IOUtils.copy(writtenStreamBytes, bout);
-                        IOUtils.closeQuietly(writtenStreamBytes);
-                        try
-                        {
-                            pdfSource.unread( bout.toByteArray() );
-                        }
-                        catch ( IOException ioe )
-                        {
-                            throw new IOException( "Could not push back " + bout.size() +
-                                                   " bytes in order to reparse stream. " +
-                                                   "Try increasing push back buffer using system property " +
-                                                   PROP_PUSHBACK_SIZE, ioe );
-                        }
-                        // close and create new filtered stream
-                        IOUtils.closeQuietly(out);
-                        out = stream.createFilteredStream();
-                        // scan until we find endstream:
-                        readUntilEndStream( new EndstreamOutputStream(out) );
-                    }
-                }
-            }
-            
-            skipSpaces();
-            String endStream = readString();
-
-            if (!endStream.equals(ENDSTREAM_STRING))
-            {
-                /*
-                 * Sometimes stream objects don't have an endstream tag so readUntilEndStream(out)
-                 * also can stop on endobj tags. If that's the case we need to make sure to unread
-                 * the endobj so parseObject() can handle that case normally.
-                 */
-                if (endStream.startsWith(ENDOBJ_STRING))
-                {
-                    byte[] endobjarray = endStream.getBytes(ISO_8859_1);
-                    pdfSource.unread(endobjarray);
-                }
-                /*
-                 * Some PDF files don't contain a new line after endstream so we
-                 * need to make sure that the next object number is getting read separately
-                 * and not part of the endstream keyword. Ex. Some files would have "endstream8"
-                 * instead of "endstream"
-                 */
-                else if(endStream.startsWith(ENDSTREAM_STRING))
-                {
-                    String extra = endStream.substring(9, endStream.length());
-                    byte[] array = extra.getBytes(ISO_8859_1);
-                    pdfSource.unread(array);
-                }
-                else
-                {
-                    /*
-                     * If for some reason we get something else here, Read until we find the next
-                     * "endstream"
-                     */
-                    readUntilEndStream( new EndstreamOutputStream(out) );
-                    readExpectedString(ENDSTREAM_STRING);
-                }
+                skipSpaces();
             }
         }
-        finally
+
+        if (value == null)
         {
-            if( out != null )
-            {
-                out.close();
-            }
+            LOG.warn("Bad Dictionary Declaration " + pdfSource);
         }
-        return stream;
+        else
+        {
+            value.setDirect(true);
+            obj.setItem(key, value);
+        }
     }
 
     protected void skipWhiteSpaces() throws IOException
@@ -527,7 +346,7 @@ public abstract class BaseParser implements Closeable
             whitespace = pdfSource.read();
             if (ASCII_LF != whitespace)
             {
-                pdfSource.unread(whitespace);
+                pdfSource.rewind(1);
                 //The spec says this is invalid but it happens in the real
                 //world so we must support it.
             }
@@ -537,123 +356,10 @@ public abstract class BaseParser implements Closeable
             //we are in an error.
             //but again we will do a lenient parsing and just assume that everything
             //is fine
-            pdfSource.unread(whitespace);
+            pdfSource.rewind(1);
         }
     }
 
-    /**
-     * This method will read through the current stream object until
-     * we find the keyword "endstream" meaning we're at the end of this
-     * object. Some pdf files, however, forget to write some endstream tags
-     * and just close off objects with an "endobj" tag so we have to handle
-     * this case as well.
-     * 
-     * This method is optimized using buffered IO and reduced number of
-     * byte compare operations.
-     * 
-     * @param out  stream we write out to.
-     * 
-     * @throws IOException if something went wrong
-     */
-    protected void readUntilEndStream( final OutputStream out ) throws IOException
-    {
-
-        int bufSize;
-        int charMatchCount = 0;
-        byte[] keyw = ENDSTREAM;
-        
-        // last character position of shortest keyword ('endobj')
-        final int quickTestOffset = 5;
-        
-        // read next chunk into buffer; already matched chars are added to beginning of buffer
-        while ( ( bufSize = pdfSource.read( strmBuf, charMatchCount, STRMBUFLEN - charMatchCount ) ) > 0 ) 
-        {
-            bufSize += charMatchCount;
-            
-            int bIdx = charMatchCount;
-            int quickTestIdx;
-        
-            // iterate over buffer, trying to find keyword match
-            for ( int maxQuicktestIdx = bufSize - quickTestOffset; bIdx < bufSize; bIdx++ ) 
-            {
-                // reduce compare operations by first test last character we would have to
-                // match if current one matches; if it is not a character from keywords
-                // we can move behind the test character;
-                // this shortcut is inspired by the Boyer-Moore string search algorithm
-                // and can reduce parsing time by approx. 20%
-                if ( ( charMatchCount == 0 ) &&
-                         ( ( quickTestIdx = bIdx + quickTestOffset ) < maxQuicktestIdx ) ) 
-                {
-                    
-                    final byte ch = strmBuf[quickTestIdx];
-                    if ( ( ch > 't' ) || ( ch < 'a' ) ) 
-                    {
-                        // last character we would have to match if current character would match
-                        // is not a character from keywords -> jump behind and start over
-                        bIdx = quickTestIdx;
-                        continue;
-                    }
-                }
-                
-                // could be negative - but we only compare to ASCII
-                final byte ch = strmBuf[bIdx];
-            
-                if ( ch == keyw[ charMatchCount ] ) 
-                {
-                    if ( ++charMatchCount == keyw.length ) 
-                    {
-                        // match found
-                        bIdx++;
-                        break;
-                    }
-                } 
-                else 
-                {
-                    if ( ( charMatchCount == 3 ) && ( ch == ENDOBJ[ charMatchCount ] ) ) 
-                    {
-                        // maybe ENDSTREAM is missing but we could have ENDOBJ
-                        keyw = ENDOBJ;
-                        charMatchCount++;
-                    } 
-                    else 
-                    {
-                        // no match; incrementing match start by 1 would be dumb since we already know matched chars
-                        // depending on current char read we may already have beginning of a new match:
-                        // 'e': first char matched;
-                        // 'n': if we are at match position idx 7 we already read 'e' thus 2 chars matched
-                        // for each other char we have to start matching first keyword char beginning with next 
-                        // read position
-                        charMatchCount = ( ch == E ) ? 1 : ( ( ch == N ) && ( charMatchCount == 7 ) ) ? 2 : 0;
-                        // search again for 'endstream'
-                        keyw = ENDSTREAM;
-                    }
-                } 
-            }  // for
-            
-            int contentBytes = Math.max( 0, bIdx - charMatchCount );
-            
-            // write buffer content until first matched char to output stream
-            if ( contentBytes > 0 )
-            {
-                out.write( strmBuf, 0, contentBytes );
-            }
-            if ( charMatchCount == keyw.length ) 
-            {
-                // keyword matched; unread matched keyword (endstream/endobj) and following buffered content
-                pdfSource.unread( strmBuf, contentBytes, bufSize - contentBytes );
-                break;
-            } 
-            else 
-            {
-                // copy matched chars at start of buffer
-                System.arraycopy( keyw, 0, strmBuf, 0, charMatchCount );
-            }
-            
-        }
-        // this writes a lonely CR or drops trailing CR LF and LF
-        out.flush();
-    }
-    
     /**
      * This is really a bug in the Document creators code, but it caused a crash
      * in PDFBox, the first bug was in this format:
@@ -708,7 +414,7 @@ public abstract class BaseParser implements Closeable
             }
         if (amountRead > 0)
         {
-            pdfSource.unread( nextThreeBytes, 0, amountRead );
+            pdfSource.rewind( amountRead );
         }
         return braces;
     }
@@ -880,7 +586,7 @@ public abstract class BaseParser implements Closeable
         }
         if (c != -1)
         {
-            pdfSource.unread(c);
+            pdfSource.rewind(1);
         }
         return new COSString(out.toByteArray());
     }
@@ -979,7 +685,7 @@ public abstract class BaseParser implements Closeable
                     {
                         COSInteger number = (COSInteger)po.remove( po.size() -1 );
                         COSObjectKey key = new COSObjectKey(number.longValue(), genNumber.intValue());
-                        pbo = document.getObjectFromPool(key);
+                        pbo = getObjectFromPool(key);
                     }
                     else
                     {
@@ -999,12 +705,12 @@ public abstract class BaseParser implements Closeable
             else
             {
                 //it could be a bad object in the array which is just skipped
-                LOG.warn("Corrupt object reference at offset " + pdfSource.getOffset());
+                LOG.warn("Corrupt object reference at offset " + pdfSource.getPosition());
 
                 // This could also be an "endobj" or "endstream" which means we can assume that
                 // the array has ended.
                 String isThisTheEnd = readString();
-                pdfSource.unread(isThisTheEnd.getBytes(ISO_8859_1));
+                pdfSource.rewind(isThisTheEnd.getBytes(ISO_8859_1).length);
                 if(ENDOBJ_STRING.equals(isThisTheEnd) || ENDSTREAM_STRING.equals(isThisTheEnd))
                 {
                     return po;
@@ -1022,32 +728,29 @@ public abstract class BaseParser implements Closeable
      * Determine if a character terminates a PDF name.
      *
      * @param ch The character
-     * @return <code>true</code> if the character terminates a PDF name, otherwise <code>false</code>.
+     * @return true if the character terminates a PDF name, otherwise false.
      */
-    protected boolean isEndOfName(char ch)
+    protected boolean isEndOfName(int ch)
     {
-        return (ch == ASCII_SPACE || ch == ASCII_CR || ch == ASCII_LF || ch == 9 || ch == '>' || ch == '<'
-            || ch == '[' || ch =='/' || ch ==']' || ch ==')' || ch =='('
-        );
+        return ch == ASCII_SPACE || ch == ASCII_CR || ch == ASCII_LF || ch == 9 || ch == '>' ||
+               ch == '<' || ch == '[' || ch =='/' || ch ==']' || ch ==')' || ch =='(';
     }
 
     /**
      * This will parse a PDF name from the stream.
      *
      * @return The parsed PDF name.
-     *
      * @throws IOException If there is an error reading from the stream.
      */
     protected COSName parseCOSName() throws IOException
     {
         readExpectedChar('/');
-        // costruisce il nome
-        StringBuilder buffer = new StringBuilder();
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         int c = pdfSource.read();
-        while( c != -1 )
+        while (c != -1)
         {
-            char ch = (char)c;
-            if(ch == '#')
+            int ch = c;
+            if (ch == '#')
             {
                 char ch1 = (char)pdfSource.read();
                 char ch2 = (char)pdfSource.read();
@@ -1058,25 +761,24 @@ public abstract class BaseParser implements Closeable
                 // PDF versions of 1.2 or later.  The solution here is that we
                 // interpret the # as an escape only when it is followed by two
                 // valid hex digits.
-                //
                 if (isHexDigit(ch1) && isHexDigit(ch2))
                 {
                     String hex = "" + ch1 + ch2;
                     try
                     {
-                        buffer.append( (char) Integer.parseInt(hex, 16));
+                        buffer.write(Integer.parseInt(hex, 16));
                     }
                     catch (NumberFormatException e)
                     {
-                        throw new IOException("Error: expected hex number, actual='" + hex + "'", e);
+                        throw new IOException("Error: expected hex digit, actual='" + hex + "'", e);
                     }
                     c = pdfSource.read();
                 }
                 else
                 {
-                    pdfSource.unread(ch2);
+                    pdfSource.rewind(1);
                     c = ch1;
-                    buffer.append( ch );
+                    buffer.write(ch);
                 }
             }
             else if (isEndOfName(ch))
@@ -1085,15 +787,16 @@ public abstract class BaseParser implements Closeable
             }
             else
             {
-                buffer.append( ch );
+                buffer.write(ch);
                 c = pdfSource.read();
             }
         }
         if (c != -1)
         {
-            pdfSource.unread(c);
+            pdfSource.rewind(1);
         }
-        return COSName.getPDFName( buffer.toString() );
+        String string = new String(buffer.toByteArray(), Charsets.UTF_8);
+        return COSName.getPDFName(string);
     }
 
     /**
@@ -1113,7 +816,7 @@ public abstract class BaseParser implements Closeable
             if( !trueString.equals( TRUE ) )
             {
                 throw new IOException( "Error parsing boolean: expected='true' actual='" + trueString 
-                        + "' at offset " + pdfSource.getOffset());
+                        + "' at offset " + pdfSource.getPosition());
             }
             else
             {
@@ -1126,7 +829,7 @@ public abstract class BaseParser implements Closeable
             if( !falseString.equals( FALSE ) )
             {
                 throw new IOException( "Error parsing boolean: expected='true' actual='" + falseString 
-                        + "' at offset " + pdfSource.getOffset());
+                        + "' at offset " + pdfSource.getPosition());
             }
             else
             {
@@ -1136,7 +839,7 @@ public abstract class BaseParser implements Closeable
         else
         {
             throw new IOException( "Error parsing boolean expected='t or f' actual='" + c 
-                    + "' at offset " + pdfSource.getOffset());
+                    + "' at offset " + pdfSource.getPosition());
         }
         return retval;
     }
@@ -1163,7 +866,7 @@ public abstract class BaseParser implements Closeable
             int leftBracket = pdfSource.read();
             // check for second left bracket
             c = (char)pdfSource.peek(); 
-            pdfSource.unread( leftBracket );
+            pdfSource.rewind(1);
             if(c == '<')
             {
 
@@ -1205,7 +908,8 @@ public abstract class BaseParser implements Closeable
             }
             else
             {
-                throw new IOException( "expected true actual='" + trueString + "' " + pdfSource );
+                throw new IOException( "expected true actual='" + trueString + "' " + pdfSource + 
+                        "' at offset " + pdfSource.getPosition());
             }
             break;
         }
@@ -1218,7 +922,8 @@ public abstract class BaseParser implements Closeable
             }
             else
             {
-                throw new IOException( "expected false actual='" + falseString + "' " + pdfSource );
+                throw new IOException( "expected false actual='" + falseString + "' " + pdfSource + 
+                        "' at offset " + pdfSource.getPosition());
             }
             break;
         }
@@ -1248,7 +953,7 @@ public abstract class BaseParser implements Closeable
                 }
                 if( ic != -1 )
                 {
-                    pdfSource.unread( ic );
+                    pdfSource.rewind(1);
                 }
                 retval = COSNumber.get( buf.toString() );
             }
@@ -1264,13 +969,13 @@ public abstract class BaseParser implements Closeable
                     // we can end up in an infinite loop otherwise
                     throw new IOException( "Unknown dir object c='" + c +
                             "' cInt=" + (int)c + " peek='" + (char)peek 
-                            + "' peekInt=" + peek + " " + pdfSource.getOffset() );
+                            + "' peekInt=" + peek + " " + pdfSource.getPosition() );
                 }
 
                 // if it's an endstream/endobj, we want to put it back so the caller will see it
                 if(ENDOBJ_STRING.equals(badString) || ENDSTREAM_STRING.equals(badString))
                 {
-                    pdfSource.unread(badString.getBytes(ISO_8859_1));
+                    pdfSource.rewind(badString.getBytes(ISO_8859_1).length);
                 }
             }
         }
@@ -1297,7 +1002,7 @@ public abstract class BaseParser implements Closeable
         }
         if (c != -1)
         {
-            pdfSource.unread(c);
+            pdfSource.rewind(1);
         }
         return buffer.toString();
     }
@@ -1330,7 +1035,7 @@ public abstract class BaseParser implements Closeable
             {
                 throw new IOException("Expected string '" + new String(expectedString)
                         + "' but missed at character '" + c + "' at offset "
-                        + pdfSource.getOffset());
+                        + pdfSource.getPosition());
             }
         }
         skipSpaces();
@@ -1348,7 +1053,7 @@ public abstract class BaseParser implements Closeable
         char c = (char) pdfSource.read();
         if (c != ec)
         {
-            throw new IOException("expected='" + ec + "' actual='" + c + "' at offset " + pdfSource.getOffset());
+            throw new IOException("expected='" + ec + "' actual='" + c + "' at offset " + pdfSource.getPosition());
         }
     }
     
@@ -1381,7 +1086,7 @@ public abstract class BaseParser implements Closeable
         }
         if (c != -1)
         {
-            pdfSource.unread(c);
+            pdfSource.rewind(1);
         }
         return buffer.toString();
     }
@@ -1543,7 +1248,7 @@ public abstract class BaseParser implements Closeable
      * @param c The character to be checked
      * @return true if the next byte in the stream is a digit.
      */
-    protected boolean isDigit(int c)
+    protected static boolean isDigit(int c)
     {
         return c >= ASCII_ZERO && c <= ASCII_NINE;
     }
@@ -1575,7 +1280,7 @@ public abstract class BaseParser implements Closeable
         }
         if (c != -1)
         {
-            pdfSource.unread(c);
+            pdfSource.rewind(1);
         }
     }
 
@@ -1633,8 +1338,8 @@ public abstract class BaseParser implements Closeable
         }
         catch( NumberFormatException e )
         {
-            pdfSource.unread(intBuffer.toString().getBytes(ISO_8859_1));
-            throw new IOException( "Error: Expected an integer type at offset "+pdfSource.getOffset(), e);
+            pdfSource.rewind(intBuffer.toString().getBytes(ISO_8859_1).length);
+            throw new IOException( "Error: Expected an integer type at offset "+pdfSource.getPosition(), e);
         }
         return retval;
     }
@@ -1660,9 +1365,9 @@ public abstract class BaseParser implements Closeable
         }
         catch( NumberFormatException e )
         {
-            pdfSource.unread(longBuffer.toString().getBytes(ISO_8859_1));
+            pdfSource.rewind(longBuffer.toString().getBytes(ISO_8859_1).length);
             throw new IOException( "Error: Expected a long type at offset "
-                    + pdfSource.getOffset() + ", instead got '" + longBuffer + "'", e);
+                    + pdfSource.getPosition() + ", instead got '" + longBuffer + "'", e);
         }
         return retval;
     }
@@ -1691,110 +1396,9 @@ public abstract class BaseParser implements Closeable
         }
         if( lastByte != -1 )
         {
-            pdfSource.unread( lastByte );
+            pdfSource.rewind(1);
         }
         return buffer;
     }
     
-    /**
-     * Skip to the start of the next object. This is used to recover from a
-     * corrupt object. This should handle all cases that parseObject supports.
-     * This assumes that the next object will start on its own line.
-     *
-     * @throws IOException if something went wrong.
-     */
-    protected void skipToNextObj() throws IOException
-    {
-        byte[] b = new byte[16];
-        Pattern p = Pattern.compile("\\d+\\s+\\d+\\s+obj.*", Pattern.DOTALL);
-        /* Read a buffer of data each time to see if it starts with a
-         * known keyword. This is not the most efficient design, but we should
-         * rarely be needing this function. We could update this to use the
-         * circular buffer, like in readUntilEndStream().
-         */
-        while (!pdfSource.isEOF())
-        {
-            int l = pdfSource.read(b);
-            if (l < 1)
-            {
-                break;
-            }
-            String s = new String(b, "US-ASCII");
-            if (s.startsWith("trailer")
-                    || s.startsWith("xref")
-                    || s.startsWith("startxref")
-                    || s.startsWith(STREAM_STRING)
-                    || p.matcher(s).matches())
-            {
-                pdfSource.unread(b);
-                break;
-            }
-            else
-            {
-                pdfSource.unread(b, 1, l - 1);
-            }
-        }
-    }
-
-    @Override
-    public void close() throws IOException
-    {
-        if (pdfSource != null)
-        {
-            pdfSource.close();
-        }
-    }
-
-    /**
-     * Parse object key (number and generation).
-     *
-     * @param continueOnError true to continue on error, false if not.
-     * @return a new object key.
-     * @throws IOException if something goes wrong.
-     */
-    protected COSObjectKey parseObjectKey(boolean continueOnError) throws IOException
-    {
-        //we are going to parse a normal object
-        long number = -1;
-        int genNum;
-        boolean missingObjectNumber = false;
-        try
-        {
-            char peeked = (char) pdfSource.peek();
-            if (peeked == '<')
-            {
-                missingObjectNumber = true;
-            }
-            else
-            {
-                number = readObjectNumber();
-            }
-        }
-        catch (IOException e)
-        {
-            //ok for some reason "GNU Ghostscript 5.10" puts two endobj
-            //statements after an object, of course this is nonsense
-            //but because we want to support as many PDFs as possible
-            //we will simply try again
-            number = readObjectNumber();
-        }
-        if (!missingObjectNumber)
-        {
-            skipSpaces();
-            genNum = readGenerationNumber();
-            String objectKey = readString(3);
-            if (!objectKey.equals("obj") && continueOnError && objectKey.equals("o"))
-            {
-                throw new IOException("expected='obj' actual='" + objectKey + "' " + pdfSource);
-            }
-            //assume that "o" was meant to be "obj" (this is a workaround for
-            // PDFBOX-773 attached PDF Andersens_Fairy_Tales.pdf).
-        }
-        else
-        {
-            number = -1;
-            genNum = -1;
-        }
-        return new COSObjectKey(number, genNum);
-    }
 }

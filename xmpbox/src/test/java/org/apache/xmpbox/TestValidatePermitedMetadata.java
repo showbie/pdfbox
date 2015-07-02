@@ -50,7 +50,7 @@ public class TestValidatePermitedMetadata
     {
         List<Object[]> params = new ArrayList<Object[]>();
         InputStream is =  TestValidatePermitedMetadata.class.getResourceAsStream("/permited_metadata.txt");
-        BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(is, "ISO-8859-1"));
         String line = reader.readLine();
         while (line!=null)
         {
@@ -70,11 +70,11 @@ public class TestValidatePermitedMetadata
         return params;
     }
 
-    private String namespace;
+    private final String namespace;
 
-    private String fieldname;
+    private final String fieldname;
 
-    private String preferred;
+    private final String preferred;
 
     public TestValidatePermitedMetadata(String ns, String prf, String fn)
     {

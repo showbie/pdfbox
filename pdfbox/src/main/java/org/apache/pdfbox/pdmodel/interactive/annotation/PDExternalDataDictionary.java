@@ -16,7 +16,6 @@
  */
 package org.apache.pdfbox.pdmodel.interactive.annotation;
 
-import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.common.COSObjectable;
@@ -28,7 +27,7 @@ import org.apache.pdfbox.pdmodel.common.COSObjectable;
 public class PDExternalDataDictionary implements COSObjectable
 {
 
-    private COSDictionary dataDictionary;
+    private final COSDictionary dataDictionary;
 
     /**
      * Constructor.
@@ -42,7 +41,7 @@ public class PDExternalDataDictionary implements COSObjectable
     /**
      * Constructor.
      * 
-     *  @param dictionary Dictionary
+     * @param dictionary Dictionary
      */
     public PDExternalDataDictionary(COSDictionary dictionary)
     {
@@ -50,49 +49,44 @@ public class PDExternalDataDictionary implements COSObjectable
     }
 
     /**
-     * {@inheritDoc}
-     */
-    public COSBase getCOSObject()
-    {
-        return this.dataDictionary;
-    }
-
-    /**
      * returns the dictionary.
      *
      * @return the dictionary
      */
-    public COSDictionary getDictionary()
+    @Override
+    public COSDictionary getCOSObject()
     {
         return this.dataDictionary;
     }
 
     /**
-     * returns the type of the external data dictionary.
-     * It must be "ExData", if present
+     * returns the type of the external data dictionary. It must be "ExData", if present
+     * 
      * @return the type of the external data dictionary
      */
     public String getType()
     {
-        return this.getDictionary().getNameAsString(COSName.TYPE, "ExData");
+        return this.getCOSObject().getNameAsString(COSName.TYPE, "ExData");
     }
 
     /**
      * returns the subtype of the external data dictionary.
+     * 
      * @return the subtype of the external data dictionary
      */
     public String getSubtype()
     {
-        return this.getDictionary().getNameAsString(COSName.SUBTYPE);
+        return this.getCOSObject().getNameAsString(COSName.SUBTYPE);
     }
 
     /**
      * This will set the subtype of the external data dictionary.
+     * 
      * @param subtype the subtype of the external data dictionary
      */
     public void setSubtype(String subtype)
     {
-        this.getDictionary().setName(COSName.SUBTYPE, subtype);
+        this.getCOSObject().setName(COSName.SUBTYPE, subtype);
     }
 
 }

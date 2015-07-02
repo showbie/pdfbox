@@ -16,7 +16,6 @@
  */
 package org.apache.pdfbox.pdmodel.documentinterchange.logicalstructure;
 
-import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.pdmodel.common.COSObjectable;
 
@@ -28,7 +27,7 @@ import org.apache.pdfbox.pdmodel.common.COSObjectable;
  */
 public class PDMarkInfo implements COSObjectable
 {
-    private COSDictionary dictionary;
+    private final COSDictionary dictionary;
 
     /**
      * Default Constructor.
@@ -55,17 +54,7 @@ public class PDMarkInfo implements COSObjectable
      * @return The cos object that matches this Java object.
      */
     @Override
-    public COSBase getCOSObject()
-    {
-        return dictionary;
-    }
-
-    /**
-     * Convert this standard java object to a COS object.
-     *
-     * @return The cos object that matches this Java object.
-     */
-    public COSDictionary getDictionary()
+    public COSDictionary getCOSObject()
     {
         return dictionary;
     }
