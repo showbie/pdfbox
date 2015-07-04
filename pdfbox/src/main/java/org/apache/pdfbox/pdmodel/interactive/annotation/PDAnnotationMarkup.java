@@ -18,11 +18,13 @@ package org.apache.pdfbox.pdmodel.interactive.annotation;
 
 import java.io.IOException;
 import java.util.Calendar;
+
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.cos.COSString;
+import org.apache.pdfbox.multimedia.PDSoundFile;
 
 /**
  * This class represents the additonal fields of a Markup type Annotation. See section 12.5.6 of ISO32000-1:2008
