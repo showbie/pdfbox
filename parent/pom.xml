@@ -118,6 +118,14 @@
         </dependencies>
     </dependencyManagement>
   
+    <repositories>
+        <repository>
+            <id>mygrid-repository</id>
+            <name>myGrid Repository</name>
+            <url>http://www.mygrid.org.uk/maven/repository</url>
+        </repository>
+    </repositories>
+  
     <profiles>
         <!-- call mvn with -Pjdk9 or call with -Daddmod="...." -->
         <profile>
