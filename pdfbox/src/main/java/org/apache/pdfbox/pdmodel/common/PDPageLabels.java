@@ -24,6 +24,8 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.TreeMap;
 import java.util.Map.Entry;
+import java.util.NavigableSet;
+import java.util.TreeSet;
 
 import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
@@ -59,7 +61,7 @@ public class PDPageLabels implements COSObjectable
      */
     public PDPageLabels(PDDocument document)
     {
-        labels = new TreeMap<Integer, PDPageLabelRange>();
+        labels = new TreeMap<>();
         this.doc = document;
         PDPageLabelRange defaultRange = new PDPageLabelRange();
         defaultRange.setStyle(PDPageLabelRange.STYLE_DECIMAL);
@@ -203,7 +205,7 @@ public class PDPageLabels implements COSObjectable
     public Map<String, Integer> getPageIndicesByLabels()
     {
         final Map<String, Integer> labelMap = 
-            new HashMap<String, Integer>(doc.getNumberOfPages());
+            new HashMap<>(doc.getNumberOfPages());
         computeLabels(new LabelHandler()
         {
             @Override
@@ -237,6 +239,16 @@ public class PDPageLabels implements COSObjectable
             }
         });
         return map;
+    }
+
+    /**
+     * Get an ordered set of page indices having a page label range.
+     *
+     * @return set of page indices.
+     */
+    public NavigableSet<Integer> getPageIndices()
+    {
+        return new TreeSet(labels.keySet());
     }
 
     /**
@@ -336,31 +348,26 @@ public class PDPageLabels implements COSObjectable
 
         private String getNumber(int pageIndex, String style)
         {
-            if (PDPageLabelRange.STYLE_DECIMAL.equals(style))
+            if (style != null)
             {
-                return Integer.toString(pageIndex);
+                switch (style)
+                {
+                    case PDPageLabelRange.STYLE_DECIMAL:
+                        return Integer.toString(pageIndex);
+                    case PDPageLabelRange.STYLE_LETTERS_LOWER:
+                        return makeLetterLabel(pageIndex);
+                    case PDPageLabelRange.STYLE_LETTERS_UPPER:
+                        return makeLetterLabel(pageIndex).toUpperCase();
+                    case PDPageLabelRange.STYLE_ROMAN_LOWER:
+                        return makeRomanLabel(pageIndex);
+                    case PDPageLabelRange.STYLE_ROMAN_UPPER:
+                        return makeRomanLabel(pageIndex).toUpperCase();
+                    default:
+                        break;
+                }
             }
-            else if (PDPageLabelRange.STYLE_LETTERS_LOWER.equals(style))
-            {
-                return makeLetterLabel(pageIndex);
-            }
-            else if (PDPageLabelRange.STYLE_LETTERS_UPPER.equals(style))
-            {
-                return makeLetterLabel(pageIndex).toUpperCase();
-            }
-            else if (PDPageLabelRange.STYLE_ROMAN_LOWER.equals(style))
-            {
-                return makeRomanLabel(pageIndex);
-            }
-            else if (PDPageLabelRange.STYLE_ROMAN_UPPER.equals(style))
-            {
-                return makeRomanLabel(pageIndex).toUpperCase();
-            }
-            else
-            {
-                // Fall back to decimals.
-                return Integer.toString(pageIndex);
-            }
+            // Fall back to decimals.
+            return Integer.toString(pageIndex);
         }
 
         /**
@@ -379,7 +386,7 @@ public class PDPageLabels implements COSObjectable
             while (power < 3 && pageIndex > 0)
             {
                 buf.insert(0, ROMANS[power][pageIndex % 10]);
-                pageIndex = pageIndex / 10;
+                pageIndex /= 10;
                 power++;
             }
             // Prepend as many m as there are thousands (which is
@@ -397,14 +404,14 @@ public class PDPageLabels implements COSObjectable
         }
 
         /**
-         * A..Z, AA..ZZ, AAA..ZZZ ... labeling as described in PDF32000-1:2008,
+         * a..z, aa..zz, aaa..zzz ... labeling as described in PDF32000-1:2008,
          * Table 159, Page 375.
          */
         private static String makeLetterLabel(int num)
         {
             StringBuilder buf = new StringBuilder();
             int numLetters = num / 26 + Integer.signum(num % 26);
-            int letter = num % 26 + 26 * (1 - Integer.signum(num % 26)) + 64;
+            int letter = num % 26 + 26 * (1 - Integer.signum(num % 26)) + 'a' - 1;
             for (int i = 0; i < numLetters; i++)
             {
                 buf.appendCodePoint(letter);

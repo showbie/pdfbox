@@ -17,6 +17,8 @@
 
 package org.apache.pdfbox.pdmodel.interactive.form;
 
+import org.apache.pdfbox.cos.COSArray;
+import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 
@@ -25,15 +27,16 @@ import org.apache.pdfbox.cos.COSName;
  */
 final class PDFieldFactory
 {
-    private PDFieldFactory()
-    {
-    }
-    
+
     private static final String FIELD_TYPE_TEXT = "Tx";
     private static final String FIELD_TYPE_BUTTON = "Btn";
     private static final String FIELD_TYPE_CHOICE = "Ch";
     private static final String FIELD_TYPE_SIGNATURE = "Sig";
-
+    
+    private PDFieldFactory()
+    {
+    }
+    
     /**
      * Creates a COSField subclass from the given field.
      *
@@ -45,6 +48,27 @@ final class PDFieldFactory
     static PDField createField(PDAcroForm form, COSDictionary field, PDNonTerminalField parent)
     {
         String fieldType = findFieldType(field);
+        
+        // Test if we have a non terminal field first as it might have
+        // properties which do apply to other fields
+        // A non terminal fields has Kids entries which do have
+        // a field name (other than annotations)
+        if (field.containsKey(COSName.KIDS))
+        {
+            COSArray kids = (COSArray) field.getDictionaryObject(COSName.KIDS);
+            if (kids != null && kids.size() > 0)
+            {
+                for (int i = 0; i < kids.size(); i++)
+                {
+                    COSBase kid = kids.getObject(i);
+                    if (kid instanceof COSDictionary && ((COSDictionary) kid).getString(COSName.T) != null)
+                    {
+                        return new PDNonTerminalField(form, field, parent);
+                    }
+                }
+            }
+        } 
+        
         if (FIELD_TYPE_CHOICE.equals(fieldType))
         {
             return createChoiceSubType(form, field, parent);
@@ -63,7 +87,8 @@ final class PDFieldFactory
         }
         else
         {
-            return new PDNonTerminalField(form, field, parent);
+            // an erroneous non-field object, see PDFBOX-2885
+            return null;
         }
     }
 
@@ -98,7 +123,7 @@ final class PDFieldFactory
         }
         else
         {
-            return new PDCheckbox(form, field, parent);
+            return new PDCheckBox(form, field, parent);
         }
     }
 
@@ -107,11 +132,10 @@ final class PDFieldFactory
         String retval = dic.getNameAsString(COSName.FT);
         if (retval == null)
         {
-            COSDictionary parent = (COSDictionary) dic.getDictionaryObject(COSName.PARENT,
-                    COSName.P);
-            if (parent != null)
+            COSBase base = dic.getDictionaryObject(COSName.PARENT, COSName.P);
+            if (base instanceof COSDictionary)
             {
-                retval = findFieldType(parent);
+                retval = findFieldType((COSDictionary) base);
             }
         }
         return retval;

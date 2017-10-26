@@ -58,7 +58,6 @@ public class PDAnnotationTextMarkup extends PDAnnotationMarkup
      */
     public PDAnnotationTextMarkup(String subType)
     {
-        super();
         setSubtype(subType);
 
         // Quad points are required, set and empty array
@@ -80,7 +79,7 @@ public class PDAnnotationTextMarkup extends PDAnnotationMarkup
      *
      * @param quadPoints an array representing the set of area covered
      */
-    public void setQuadPoints(float[] quadPoints)
+    public final void setQuadPoints(float[] quadPoints)
     {
         COSArray newQuadPoints = new COSArray();
         newQuadPoints.setFloatArray(quadPoints);
@@ -111,7 +110,7 @@ public class PDAnnotationTextMarkup extends PDAnnotationMarkup
      *
      * @param subType The subtype of the annotation
      */
-    public void setSubtype(String subType)
+    public final void setSubtype(String subType)
     {
         getCOSObject().setName(COSName.SUBTYPE, subType);
     }
@@ -121,6 +120,7 @@ public class PDAnnotationTextMarkup extends PDAnnotationMarkup
      *
      * @return The subtype of this annotation, see the SUB_TYPE_XXX constants.
      */
+    @Override
     public String getSubtype()
     {
         return getCOSObject().getNameAsString(COSName.SUBTYPE);

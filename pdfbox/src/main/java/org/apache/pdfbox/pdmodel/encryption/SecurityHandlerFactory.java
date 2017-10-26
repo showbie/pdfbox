@@ -19,11 +19,8 @@ package org.apache.pdfbox.pdmodel.encryption;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
-import java.security.Security;
 import java.util.HashMap;
 import java.util.Map;
-
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 /**
  * Manages security handlers for the application.
@@ -39,18 +36,10 @@ public final class SecurityHandlerFactory
     /** Singleton instance */
     public static final SecurityHandlerFactory INSTANCE = new SecurityHandlerFactory();
 
-    static
-    {
-        Security.addProvider(new BouncyCastleProvider());
-    }
-
-    private final Map<String, Class<? extends SecurityHandler>> nameToHandler =
-            new HashMap<String, Class<? extends SecurityHandler>>();
+    private final Map<String, Class<? extends SecurityHandler>> nameToHandler = new HashMap<>();
 
     private final Map<Class<? extends ProtectionPolicy>,
-                      Class<? extends SecurityHandler>> policyToHandler =
-            new HashMap<Class<? extends ProtectionPolicy>,
-                        Class<? extends SecurityHandler>>();
+                      Class<? extends SecurityHandler>> policyToHandler = new HashMap<>();
 
     private SecurityHandlerFactory()
     {
@@ -139,22 +128,8 @@ public final class SecurityHandlerFactory
                     handlerClass.getDeclaredConstructor(argsClasses);
             return ctor.newInstance(args);
         }
-        catch(NoSuchMethodException e)
-        {
-            // should not happen in normal operation
-            throw new RuntimeException(e);
-        }
-        catch(IllegalAccessException e)
-        {
-            // should not happen in normal operation
-            throw new RuntimeException(e);
-        }
-        catch(InstantiationException e)
-        {
-            // should not happen in normal operation
-            throw new RuntimeException(e);
-        }
-        catch(InvocationTargetException e)
+        catch(NoSuchMethodException | IllegalAccessException | InstantiationException |
+                InvocationTargetException e)
         {
             // should not happen in normal operation
             throw new RuntimeException(e);

@@ -27,7 +27,7 @@ import java.io.IOException;
  *
  * @author Ben Litchfield
  */
-public class AddJavascript
+public final class AddJavascript
 {
     private AddJavascript()
     {
@@ -39,9 +39,9 @@ public class AddJavascript
      *
      * @param args The command line arguments.
      *
-     * @throws Exception If there is an error parsing the document.
+     * @throws IOException If there is an error parsing the document.
      */
-    public static void main( String[] args ) throws Exception
+    public static void main( String[] args ) throws IOException
     {
         if( args.length != 2 )
         {
@@ -49,10 +49,8 @@ public class AddJavascript
         }
         else
         {
-            PDDocument document = null;
-            try
+            try (PDDocument document = PDDocument.load(new File(args[0])))
             {
-                document = PDDocument.load( new File(args[0]) );
                 PDActionJavaScript javascript = new PDActionJavaScript(
                     "app.alert( {cMsg: 'PDFBox rocks!', nIcon: 3, nType: 0, cTitle: 'PDFBox Javascript example' } );");
                 document.getDocumentCatalog().setOpenAction( javascript );
@@ -62,13 +60,6 @@ public class AddJavascript
                 }
                 document.save( args[1] );
             }
-            finally
-            {
-                if( document != null )
-                {
-                    document.close();
-                }
-            }
         }
     }
 
@@ -77,6 +68,6 @@ public class AddJavascript
      */
     private static void usage()
     {
-        System.err.println( "Usage: java org.apache.pdfbox.examples.pdmodel.AddJavascript <input-pdf> <output-pdf>" );
+        System.err.println( "Usage: java " + AddJavascript.class.getName() + " <input-pdf> <output-pdf>" );
     }
 }

@@ -20,6 +20,7 @@ import java.awt.BasicStroke;
 import java.awt.Composite;
 import java.awt.geom.Area;
 import java.awt.geom.GeneralPath;
+import org.apache.pdfbox.cos.COSBase;
 
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.graphics.PDLineDashPattern;
@@ -60,10 +61,11 @@ public class PDGraphicsState implements Cloneable
 
     // DEVICE-DEPENDENT parameters
     private boolean overprint = false;
+    private boolean nonStrokingOverprint = false;
     private double overprintMode = 0;
     //black generation
     //undercolor removal
-    //transfer
+    private COSBase transfer = null;
     //halftone
     private double flatness = 1.0;
     private double smoothness = 0;
@@ -198,9 +200,9 @@ public class PDGraphicsState implements Cloneable
     }
 
     /**
-     * Get the value of the stroke alpha constants property.
+     * Get the value of the stroke alpha constant property.
      *
-     * @return The value of the stroke alpha constants parameter.
+     * @return The value of the stroke alpha constant parameter.
      */
     public double getAlphaConstant()
     {
@@ -208,9 +210,9 @@ public class PDGraphicsState implements Cloneable
     }
 
     /**
-     * set the value of the stroke alpha constants property.
+     * set the value of the stroke alpha constant property.
      *
-     * @param value The value of the stroke alpha constants parameter.
+     * @param value The value of the stroke alpha constant parameter.
      */
     public void setAlphaConstant(double value)
     {
@@ -218,21 +220,45 @@ public class PDGraphicsState implements Cloneable
     }
 
     /**
-     * Get the value of the non-stroke alpha constants property.
+     * Get the value of the non-stroke alpha constant property.
      *
-     * @return The value of the non-stroke alpha constants parameter.
+     * @return The value of the non-stroke alpha constant parameter.
+     * @deprecated use {@link #getNonStrokeAlphaConstant() }
      */
+    @Deprecated
     public double getNonStrokeAlphaConstants()
     {
         return nonStrokingAlphaConstant;
     }
 
     /**
-     * set the value of the non-stroke alpha constants property.
+     * set the value of the non-stroke alpha constant property.
      *
-     * @param value The value of the non-stroke alpha constants parameter.
+     * @param value The value of the non-stroke alpha constant parameter.
+     * @deprecated use {@link #setNonStrokeAlphaConstant(double) }
      */
+    @Deprecated
     public void setNonStrokeAlphaConstants(double value)
+    {
+        nonStrokingAlphaConstant = value;
+    }
+
+    /**
+     * Get the value of the non-stroke alpha constant property.
+     *
+     * @return The value of the non-stroke alpha constant parameter.
+     */
+    public double getNonStrokeAlphaConstant()
+    {
+        return nonStrokingAlphaConstant;
+    }
+
+    /**
+     * set the value of the non-stroke alpha constant property.
+     *
+     * @param value The value of the non-stroke alpha constant parameter.
+     */
+    public void setNonStrokeAlphaConstant(double value)
     {
         nonStrokingAlphaConstant = value;
     }
@@ -299,8 +325,6 @@ public class PDGraphicsState implements Cloneable
     }
 
     /**
-
-    /**
      * get the value of the overprint property.
      *
      * @return The value of the overprint parameter.
@@ -318,6 +342,26 @@ public class PDGraphicsState implements Cloneable
     public void setOverprint(boolean value)
     {
         overprint = value;
+    }
+
+    /**
+     * get the value of the non stroking overprint property.
+     *
+     * @return The value of the non stroking overprint parameter.
+     */
+    public boolean isNonStrokingOverprint()
+    {
+        return nonStrokingOverprint;
+    }
+
+    /**
+     * set the value of the non stroking overprint property.
+     *
+     * @param value The value of the non stroking overprint parameter.
+     */
+    public void setNonStrokingOverprint(boolean value)
+    {
+        nonStrokingOverprint = value;
     }
 
     /**
@@ -592,5 +636,33 @@ public class PDGraphicsState implements Cloneable
     public Composite getNonStrokingJavaComposite()
     {
         return BlendComposite.getInstance(blendMode, (float) nonStrokingAlphaConstant);
+    }
+
+    /**
+     * This will get the transfer function.
+     *
+     * @return The transfer function. According to the PDF specification, this is either a single
+     * function (which applies to all process colorants) or an array of four functions (which apply
+     * to the process colorants individually). The name Identity may be used to represent the
+     * identity function, and the name Default denotes the transfer function that was in effect at
+     * the start of the page.
+     */
+    public COSBase getTransfer()
+    {
+        return transfer;
+    }
+
+    /**
+     * This will set the transfer function.
+     *
+     * @param transfer The transfer function. According to the PDF specification, this is either a
+     * single function (which applies to all process colorants) or an array of four functions (which
+     * apply to the process colorants individually). The name Identity may be used to represent the
+     * identity function, and the name Default denotes the transfer function that was in effect at
+     * the start of the page.
+     */
+    public void setTransfer(COSBase transfer)
+    {
+        this.transfer = transfer;
     }
 }

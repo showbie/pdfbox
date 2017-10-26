@@ -27,22 +27,15 @@ import java.awt.image.WritableRaster;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
-
+import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.pdfbox.cos.COSArray;
-import org.apache.pdfbox.io.IOUtils;
-import org.apache.pdfbox.io.RandomAccessBuffer;
-import org.apache.pdfbox.io.RandomAccessRead;
-import org.apache.pdfbox.pdmodel.graphics.color.PDColorSpace;
-import org.apache.pdfbox.pdmodel.graphics.color.PDIndexed;
-
-import javax.imageio.stream.ImageInputStream;
-import javax.imageio.stream.MemoryCacheImageInputStream;
-
 import org.apache.pdfbox.cos.COSNumber;
-import org.apache.pdfbox.pdmodel.common.PDMemoryStream;
-import org.apache.pdfbox.pdmodel.common.PDStream;
+import org.apache.pdfbox.pdmodel.graphics.color.PDColorSpace;
+import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
+import org.apache.pdfbox.pdmodel.graphics.color.PDIndexed;
 
 /**
  * Reads a sampled image from a PDF file.
@@ -65,12 +58,11 @@ final class SampledImageReader
      */
     public static BufferedImage getStencilImage(PDImage pdImage, Paint paint) throws IOException
     {
-        // get mask (this image)
-        BufferedImage mask = getRGBImage(pdImage, null);
+        int width = pdImage.getWidth();
+        int height = pdImage.getHeight();
 
         // compose to ARGB
-        BufferedImage masked = new BufferedImage(mask.getWidth(), mask.getHeight(),
-                BufferedImage.TYPE_INT_ARGB);
+        BufferedImage masked = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = masked.createGraphics();
 
         // draw the mask
@@ -79,27 +71,58 @@ final class SampledImageReader
         // fill with paint using src-in
         //g.setComposite(AlphaComposite.SrcIn);
         g.setPaint(paint);
-        g.fillRect(0, 0, mask.getWidth(), mask.getHeight());
+        g.fillRect(0, 0, width, height);
         g.dispose();
 
         // set the alpha
-        int width = masked.getWidth();
-        int height = masked.getHeight();
         WritableRaster raster = masked.getRaster();
-        WritableRaster alpha = mask.getRaster();
 
-        final float[] transparent = new float[4];
-        float[] alphaPixel = null;
-        for (int y = 0; y < height; y++)
+        final int[] transparent = new int[4];
+
+        // avoid getting a BufferedImage for the mask to lessen memory footprint.
+        // Such masks are always bpc=1 and have no colorspace, but have a decode.
+        // (see 8.9.6.2 Stencil Masking)
+        try (InputStream iis = pdImage.createInputStream())
         {
-            for (int x = 0; x < width; x++)
+            final float[] decode = getDecodeArray(pdImage);
+            int value = decode[0] < decode[1] ? 1 : 0;
+            int rowLen = width / 8;
+            if (width % 8 > 0)
             {
-                alphaPixel = alpha.getPixel(x, y, alphaPixel);
-                if (alphaPixel[0] == 255)
-                {
-                    raster.setPixel(x, y, transparent);
-                }
+                rowLen++;
             }
+            byte[] buff = new byte[rowLen];
+            for (int y = 0; y < height; y++)
+            {
+                int x = 0;
+                int readLen = iis.read(buff);
+                for (int r = 0; r < rowLen && r < readLen; r++)
+                {
+                    int byteValue = buff[r];
+                    int mask = 128;
+                    int shift = 7;
+                    for (int i = 0; i < 8; i++)
+                    {
+                        int bit = (byteValue & mask) >> shift;
+                        mask >>= 1;
+                        --shift;
+                        if (bit == value)
+                        {
+                            raster.setPixel(x, y, transparent);
+                        }
+                        x++;
+                        if (x == width)
+                        {
+                            break;
+                        }
+                    }
+                }
+                if (readLen != rowLen)
+                {
+                    LOG.warn("premature EOF, image will be incomplete");
+                    break;
+                }
+            }            
         }
 
         return masked;
@@ -116,15 +139,7 @@ final class SampledImageReader
      */
     public static BufferedImage getRGBImage(PDImage pdImage, COSArray colorKey) throws IOException
     {
-        if (pdImage.getStream() instanceof PDMemoryStream)
-        {
-            // for inline images
-            if (pdImage.getStream().getLength() == 0)
-            {
-                throw new IOException("Image stream is empty");
-            }
-        }
-        else if (pdImage.getStream().getStream().getFilteredLength() == 0)
+        if (pdImage.isEmpty())
         {
             throw new IOException("Image stream is empty");
         }
@@ -137,46 +152,59 @@ final class SampledImageReader
         final int bitsPerComponent = pdImage.getBitsPerComponent();
         final float[] decode = getDecodeArray(pdImage);
 
+        if (width <= 0 || height <= 0)
+        {
+            throw new IOException("image width and height must be positive");
+        }
+
+        if (bitsPerComponent == 1 && colorKey == null && numComponents == 1)
+        {
+            return from1Bit(pdImage);
+        }
+
         //
         // An AWT raster must use 8/16/32 bits per component. Images with < 8bpc
         // will be unpacked into a byte-backed raster. Images with 16bpc will be reduced
         // in depth to 8bpc as they will be drawn to TYPE_INT_RGB images anyway. All code
-        // in PDColorSpace#toRGBImage expects and 8-bit range, i.e. 0-255.
+        // in PDColorSpace#toRGBImage expects an 8-bit range, i.e. 0-255.
         //
         WritableRaster raster = Raster.createBandedRaster(DataBuffer.TYPE_BYTE, width, height,
                 numComponents, new Point(0, 0));
-
-        // convert image, faster path for non-decoded, non-colormasked 8-bit images
         final float[] defaultDecode = pdImage.getColorSpace().getDefaultDecode(8);
         if (bitsPerComponent == 8 && Arrays.equals(decode, defaultDecode) && colorKey == null)
         {
+            // convert image, faster path for non-decoded, non-colormasked 8-bit images
             return from8bit(pdImage, raster);
         }
-        else if (bitsPerComponent == 1 && colorKey == null)
-        {
-            return from1Bit(pdImage, raster);
-        }
-        else
-        {
-            return fromAny(pdImage, raster, colorKey);
-        }
+        return fromAny(pdImage, raster, colorKey);
     }
-    
-    private static BufferedImage from1Bit(PDImage pdImage, WritableRaster raster)
-            throws IOException
+
+    private static BufferedImage from1Bit(PDImage pdImage) throws IOException
     {
         final PDColorSpace colorSpace = pdImage.getColorSpace();
         final int width = pdImage.getWidth();
         final int height = pdImage.getHeight();
         final float[] decode = getDecodeArray(pdImage);
-        byte[] output = ((DataBufferByte) raster.getDataBuffer()).getData();
+        BufferedImage bim = null;
+        WritableRaster raster;
+        byte[] output;
+        if (colorSpace instanceof PDDeviceGray)
+        {
+            // TYPE_BYTE_GRAY and not TYPE_BYTE_BINARY because this one is handled
+            // without conversion to RGB by Graphics.drawImage
+            // this reduces the memory footprint, only one byte per pixel instead of three.
+            bim = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+            raster = bim.getRaster();
+        }
+        else
+        {
+            raster = Raster.createBandedRaster(DataBuffer.TYPE_BYTE, width, height, 1, new Point(0, 0));
+        }
+        output = ((DataBufferByte) raster.getDataBuffer()).getData();
 
         // read bit stream
-        InputStream iis = null;
-        try
+        try (InputStream iis = pdImage.createInputStream())
         {
-            // create stream
-            iis = pdImage.getStream().createInputStream();
             final boolean isIndexed = colorSpace instanceof PDIndexed;
 
             int rowLen = width / 8;
@@ -227,17 +255,13 @@ final class SampledImageReader
                 }
             }
 
-            // use the color space to convert the image to RGB
-            BufferedImage rgbImage = colorSpace.toRGBImage(raster);
-
-            return rgbImage;
-        }
-        finally
-        {
-            if (iis != null)
+            if (bim != null)
             {
-                iis.close();
+                return bim;
             }
+
+            // use the color space to convert the image to RGB
+            return colorSpace.toRGBImage(raster);
         }
     }
 
@@ -245,42 +269,35 @@ final class SampledImageReader
     private static BufferedImage from8bit(PDImage pdImage, WritableRaster raster)
             throws IOException
     {
-        RandomAccessRead input;
-        PDStream stream = pdImage.getStream();
-        if (stream instanceof PDMemoryStream)
-        {
-            input = new RandomAccessBuffer(stream.getByteArray());
-        }
-        else
-        {
-            input = stream.getStream().getUnfilteredRandomAccess();
-        }
-        try
+        try (InputStream input = pdImage.createInputStream())
         {
             // get the raster's underlying byte buffer
             byte[][] banks = ((DataBufferByte) raster.getDataBuffer()).getBankData();
             final int width = pdImage.getWidth();
             final int height = pdImage.getHeight();
             final int numComponents = pdImage.getColorSpace().getNumberOfComponents();
-            int max = width * height;
-            byte[] tempBytes = new byte[numComponents];
-            for (int i = 0; i < max; i++)
+            byte[] tempBytes = new byte[numComponents * width];
+            // compromise between memory and time usage:
+            // reading the whole image consumes too much memory
+            // reading one pixel at a time makes it slow in our buffering infrastructure 
+            int i = 0;
+            for (int y = 0; y < height; ++y)
             {
                 input.read(tempBytes);
-                for (int c = 0; c < numComponents; c++)
+                for (int x = 0; x < width; ++x)
                 {
-                    banks[c][i] = tempBytes[0+c];
+                    for (int c = 0; c < numComponents; c++)
+                    {
+                        banks[c][i] = tempBytes[x * numComponents + c];
+                    }
+                    ++i;
                 }
             }
             // use the color space to convert the image to RGB
             return pdImage.getColorSpace().toRGBImage(raster);
         }
-        finally
-        {
-            IOUtils.closeQuietly(input);
-        }
-    }    
-    
+    }
+
     // slower, general-purpose image conversion from any image format
     private static BufferedImage fromAny(PDImage pdImage, WritableRaster raster, COSArray colorKey)
             throws IOException
@@ -293,12 +310,9 @@ final class SampledImageReader
         final float[] decode = getDecodeArray(pdImage);
 
         // read bit stream
-        ImageInputStream iis = null;
-        try
+        try (ImageInputStream iis = new MemoryCacheImageInputStream(pdImage.createInputStream()))
         {
-            // create stream
-            iis = new MemoryCacheImageInputStream(pdImage.getStream().createInputStream());
-            final float sampleMax = (float)Math.pow(2, bitsPerComponent) - 1f;
+            final float sampleMax = (float) Math.pow(2, bitsPerComponent) - 1f;
             final boolean isIndexed = colorSpace instanceof PDIndexed;
 
             // init color key mask
@@ -384,13 +398,6 @@ final class SampledImageReader
             else
             {
                 return rgbImage;
-            }
-        }
-        finally
-        {
-            if (iis != null)
-            {
-                iis.close();
             }
         }
     }

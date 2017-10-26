@@ -20,6 +20,7 @@ import java.awt.Color;
 import java.io.File;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Set;
 
 import junit.framework.TestCase;
@@ -30,6 +31,7 @@ import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDPageContentStream.AppendMode;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.graphics.optionalcontent.PDOptionalContentProperties.BaseState;
@@ -92,7 +94,7 @@ public class TestOptionalContentGroups extends TestCase
             assertFalse(ocprops.isGroupEnabled("disabled"));
 
             //Setup page content stream and paint background/title
-            PDPageContentStream contentStream = new PDPageContentStream(doc, page, false, false);
+            PDPageContentStream contentStream = new PDPageContentStream(doc, page, AppendMode.OVERWRITE, false);
             PDFont font = PDType1Font.HELVETICA_BOLD;
             contentStream.beginMarkedContent(COSName.OC, background);
             contentStream.beginText();
@@ -171,7 +173,7 @@ public class TestOptionalContentGroups extends TestCase
 
             PDOptionalContentProperties ocgs = catalog.getOCProperties();
             assertEquals(BaseState.ON, ocgs.getBaseState());
-            Set<String> names = new java.util.HashSet<String>(Arrays.asList(ocgs.getGroupNames()));
+            Set<String> names = new java.util.HashSet<>(Arrays.asList(ocgs.getGroupNames()));
             assertEquals(3, names.size());
             assertTrue(names.contains("background"));
 
@@ -187,8 +189,15 @@ public class TestOptionalContentGroups extends TestCase
             assertNull(ocgs.getGroup("inexistent"));
 
             Collection<PDOptionalContentGroup> coll = ocgs.getOptionalContentGroups();
-            coll.contains(background);
-
+            assertEquals(3, coll.size());
+            Set<String> nameSet = new HashSet<>();
+            for (PDOptionalContentGroup ocg2 : coll)
+            {
+                nameSet.add(ocg2.getName());
+            }
+            assertTrue(nameSet.contains("background"));
+            assertTrue(nameSet.contains("enabled"));
+            assertTrue(nameSet.contains("disabled"));
         }
         finally
         {

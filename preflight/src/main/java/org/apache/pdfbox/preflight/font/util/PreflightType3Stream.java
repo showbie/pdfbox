@@ -33,6 +33,7 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDInlineImage;
 import org.apache.pdfbox.preflight.PreflightContext;
 import org.apache.pdfbox.preflight.content.PreflightStreamEngine;
 import org.apache.pdfbox.contentstream.operator.Operator;
+import org.apache.pdfbox.cos.COSBase;
 
 /**
  * This class is used to parse a glyph of a Type3 font program. If the glyph is parsed without error, the width of the
@@ -84,7 +85,8 @@ public class PreflightType3Stream extends PreflightStreamEngine
      * @throws IOException
      *             If there is an error processing the operation.
      */
-    protected void processOperator(Operator operator, List operands) throws IOException
+    @Override
+    protected void processOperator(Operator operator, List<COSBase> operands) throws IOException
     {
         super.processOperator(operator, operands);
         String operation = operator.getName();
@@ -95,15 +97,13 @@ public class PreflightType3Stream extends PreflightStreamEngine
                                       operator.getImageData(),
                                       getResources());
 
-            validateImageFilter(operator);
-            validateImageColorSpace(operator);
+            validateInlineImageFilter(operator);
+            validateInlineImageColorSpace(operator);
         }
 
         if (operation.equals("d0"))
         {
- 
             checkType3FirstOperator(operands);
-
         }
         else if (operation.equals("d1"))
         {
@@ -135,19 +135,15 @@ public class PreflightType3Stream extends PreflightStreamEngine
      * @param arguments
      * @throws IOException
      */
-    private void checkType3FirstOperator(List arguments) throws IOException
+    private void checkType3FirstOperator(List<COSBase> arguments) throws IOException
     {
         if (!firstOperator)
         {
             throw new IOException("Type3 CharProc : First operator must be d0 or d1");
         }
 
-        Object obj = arguments.get(0);
-        if (obj instanceof Number)
-        {
-            width = ((Number) obj).intValue();
-        }
-        else if (obj instanceof COSNumber)
+        COSBase obj = arguments.get(0);
+        if (obj instanceof COSNumber)
         {
             width = ((COSNumber) obj).floatValue();
         }

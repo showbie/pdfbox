@@ -25,8 +25,13 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 /**
  * Creates a simple document. The example is taken from the pdf file format specification.
  */
-public class ShowColorBoxes
+public final class ShowColorBoxes
 {
+
+    private ShowColorBoxes()
+    {
+    }
+    
     public static void main(String[] args) throws IOException
     {
         if (args.length != 1)
@@ -37,8 +42,7 @@ public class ShowColorBoxes
         
         String filename = args[0];
 
-        PDDocument doc = new PDDocument();
-        try
+        try (PDDocument doc = new PDDocument())
         {
             PDPage page = new PDPage();
             doc.addPage(page);
@@ -57,10 +61,6 @@ public class ShowColorBoxes
 
             contents.close();
             doc.save(filename);
-        }
-        finally
-        {
-            doc.close();
         }
     }
 }

@@ -78,15 +78,21 @@ import org.apache.pdfbox.contentstream.operator.state.SetMatrix;
 import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingDeviceCMYKColor;
 import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingColor;
 import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingColorSpace;
+import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingDeviceGrayColor;
 import org.apache.pdfbox.contentstream.operator.color.SetNonStrokingDeviceRGBColor;
 import org.apache.pdfbox.contentstream.operator.color.SetStrokingDeviceCMYKColor;
 import org.apache.pdfbox.contentstream.operator.color.SetStrokingColor;
 import org.apache.pdfbox.contentstream.operator.color.SetStrokingColorSpace;
+import org.apache.pdfbox.contentstream.operator.color.SetStrokingDeviceGrayColor;
 import org.apache.pdfbox.contentstream.operator.color.SetStrokingDeviceRGBColor;
+import org.apache.pdfbox.contentstream.operator.state.SetGraphicsStateParameters;
 import org.apache.pdfbox.contentstream.operator.text.SetTextLeading;
 import org.apache.pdfbox.contentstream.operator.text.SetTextRenderingMode;
 import org.apache.pdfbox.contentstream.operator.text.SetTextRise;
 import org.apache.pdfbox.contentstream.operator.text.SetWordSpacing;
+import org.apache.pdfbox.cos.COSArray;
+import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
+import org.apache.pdfbox.pdmodel.graphics.state.RenderingMode;
 
 /**
  * This class inherits from org.apache.pdfbox.util.PDFStreamEngine to allow the validation of specific rules in
@@ -101,14 +107,13 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
 
     protected PreflightContext context = null;
     protected COSDocument cosDocument = null;
-    protected PDPage processeedPage = null;
+    protected PDPage processedPage = null;
 
-    public PreflightStreamEngine(PreflightContext _context, PDPage _page)
+    public PreflightStreamEngine(PreflightContext context, PDPage page)
     {
-        super();
-        this.context = _context;
-        this.cosDocument = _context.getDocument().getDocument();
-        this.processeedPage = _page;
+        this.context = context;
+        this.cosDocument = context.getDocument().getDocument();
+        this.processedPage = page;
 
         // Graphics operators
         addOperator(new SetLineWidth());
@@ -127,6 +132,9 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
         addOperator(new SetNonStrokingDeviceRGBColor());
         addOperator(new SetStrokingDeviceRGBColor());
 
+        addOperator(new SetNonStrokingDeviceGrayColor());
+        addOperator(new SetStrokingDeviceGrayColor());
+
         addOperator(new SetStrokingColor());
         addOperator(new SetStrokingColorN());
         addOperator(new SetNonStrokingColor());
@@ -139,6 +147,7 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
         // Text operators
         addOperator(new BeginText());
         addOperator(new EndText());
+        addOperator(new SetGraphicsStateParameters());
         addOperator(new SetFontAndSize());
         addOperator(new SetTextRenderingMode());
         addOperator(new SetMatrix());
@@ -193,13 +202,9 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
         addOperator(new StubOperator("F"));
         addOperator(new StubOperator("f*"));
 
-        addOperator(new StubOperator("g"));
-        addOperator(new StubOperator("G"));
-
         addOperator(new StubOperator("M"));
         addOperator(new StubOperator("MP"));
 
-        addOperator(new StubOperator("gs"));
         addOperator(new StubOperator("i"));
 
         addOperator(new StubOperator("ri"));
@@ -219,7 +224,7 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
      * @throws ContentStreamException
      *             ERROR_GRAPHIC_UNEXPECTED_VALUE_FOR_KEY if the operand is invalid
      */
-    protected void validateRenderingIntent(Operator operator, List arguments) throws ContentStreamException
+    protected void validateRenderingIntent(Operator operator, List<COSBase> arguments) throws ContentStreamException
     {
         if ("ri".equals(operator.getName()))
         {
@@ -227,10 +232,6 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
             if (arguments.get(0) instanceof COSName)
             {
                 riArgument0 = ((COSName) arguments.get(0)).getName();
-            }
-            else if (arguments.get(0) instanceof String)
-            {
-                riArgument0 = (String) arguments.get(0);
             }
 
             if (!RenderingIntents.contains(riArgument0))
@@ -265,7 +266,7 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
      * @param operator the InlinedImage object (BI to EI)
      * @throws ContentStreamException
      */
-    protected void validateImageFilter(Operator operator) throws ContentStreamException
+    protected void validateInlineImageFilter(Operator operator) throws ContentStreamException
     {
         COSDictionary dict = operator.getImageParameters();
         /*
@@ -281,13 +282,13 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
      * the color space defined in OutputIntent dictionaries.
      * 
      * @param operator the InlinedImage object (BI to EI)
-     * @throws ContentStreamException
+     * @throws IOException
      */
-    protected void validateImageColorSpace(Operator operator) throws IOException
+    protected void validateInlineImageColorSpace(Operator operator) throws IOException
     {
         COSDictionary dict = operator.getImageParameters();
 
-        COSBase csInlinedBase = dict.getItem(COSName.CS);
+        COSBase csInlinedBase = dict.getDictionaryObject(COSName.CS, COSName.COLORSPACE);
         ColorSpaceHelper csHelper = null;
         if (csInlinedBase != null)
         {
@@ -310,31 +311,66 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
                     if (pdCS != null)
                     {
                         cs = ColorSpaces.valueOf(pdCS.getName());
-                        PreflightConfiguration cfg = context.getConfig();
-                        ColorSpaceHelperFactory csFact = cfg.getColorSpaceHelperFact();
-                        csHelper = csFact.getColorSpaceHelper(context, pdCS, ColorSpaceRestriction.ONLY_DEVICE);
+                        csHelper = getColorSpaceHelper(pdCS);
                     }
                 }
 
                 if (cs == null)
                 {
-                    registerError("The ColorSpace is unknown", ERROR_GRAPHIC_UNEXPECTED_VALUE_FOR_KEY);
+                    registerError("The ColorSpace " + colorSpace + " is unknown", ERROR_GRAPHIC_UNEXPECTED_VALUE_FOR_KEY);
                     return;
                 }
             }
 
             if (csHelper == null)
             {
+                // convert to long names first
+                csInlinedBase = toLongName(csInlinedBase);
+                if (csInlinedBase instanceof COSArray && ((COSArray) csInlinedBase).size() > 1)
+                {
+                    COSArray srcArray = (COSArray) csInlinedBase;
+                    COSBase csType = srcArray.get(0);
+                    if (COSName.I.equals(csType) || COSName.INDEXED.equals(csType))
+                    {
+                        COSArray dstArray = new COSArray();
+                        dstArray.addAll(srcArray);
+                        dstArray.set(0, COSName.INDEXED);
+                        dstArray.set(1, toLongName(srcArray.get(1)));
+                        csInlinedBase = dstArray;
+                    }
+                }                
                 PDColorSpace pdCS = PDColorSpace.create(csInlinedBase);
-                PreflightConfiguration cfg = context.getConfig();
-                ColorSpaceHelperFactory csFact = cfg.getColorSpaceHelperFact();
-                csHelper = csFact.getColorSpaceHelper(context, pdCS, ColorSpaceRestriction.ONLY_DEVICE);
+                csHelper = getColorSpaceHelper(pdCS);
             }
-
             csHelper.validate();
         }
     }
 
+    private ColorSpaceHelper getColorSpaceHelper(PDColorSpace pdCS)
+    {
+        PreflightConfiguration cfg = context.getConfig();
+        ColorSpaceHelperFactory csFact = cfg.getColorSpaceHelperFact();
+        return csFact.getColorSpaceHelper(context, pdCS, ColorSpaceRestriction.ONLY_DEVICE);
+    }
+    
+    // deliver the long name of a device colorspace, or the parameter
+    private COSBase toLongName(COSBase cs)
+    {
+        if (COSName.RGB.equals(cs))
+        {
+            return COSName.DEVICERGB;
+        }
+        if (COSName.CMYK.equals(cs))
+        {
+            return COSName.DEVICECMYK;
+        }
+        if (COSName.G.equals(cs))
+        {
+            return COSName.DEVICEGRAY;
+        }
+        return cs;
+    }
+    
     /**
      * This method validates if the ColorOperator can be used with the color space
      * defined in OutputIntent dictionaries.
@@ -370,6 +406,53 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
         }
     }
 
+    /**
+     * In some cases, the colorspace isn't checked because defaults (/DeviceGray) is used. Thus we
+     * need to check all text output, stroke and fill for /DeviceGray.
+     *
+     * @param operator an operator.
+     * @throws ContentStreamException
+     */
+    void validateDefaultColorSpace(Operator operator) throws ContentStreamException
+    {
+        boolean v = false;
+        String op = operator.getName();
+        if ("Tj".equals(op) || "TJ".equals(op) || "'".equals(op) || "\"".equals(op))
+        {
+            RenderingMode rm = getGraphicsState().getTextState().getRenderingMode();
+            if (rm.isFill() && 
+                    getGraphicsState().getNonStrokingColor().getColorSpace() instanceof PDDeviceGray)
+            {
+                v = true;
+            }
+            if (rm.isStroke() && 
+                    getGraphicsState().getStrokingColor().getColorSpace() instanceof PDDeviceGray)
+            {
+                v = true;
+            }
+        }
+        // fills
+        if (("f".equals(op) || "F".equals(op) || "f*".equals(op) || 
+            "B".equals(op) || "B*".equals(op) || "b".equals(op) || "b*".equals(op)) &&
+                getGraphicsState().getNonStrokingColor().getColorSpace() instanceof PDDeviceGray)
+        {
+            v = true;
+        }
+        // strokes
+        if (("B".equals(op) || "B*".equals(op) || "b".equals(op) || "b*".equals(op) || 
+            "s".equals(op) || "S".equals(op)) &&
+                getGraphicsState().getStrokingColor().getColorSpace() instanceof PDDeviceGray)
+        {
+            v = true;
+        }
+        if (v && !validColorSpaceDestOutputProfile(PreflightStreamEngine.ColorSpaceType.ALL))
+        {
+            registerError("/DeviceGray default for operator \"" + op
+                    + "\" can't be used without Color Profile",
+                    ERROR_GRAPHIC_INVALID_COLOR_SPACE_MISSING);
+        }
+    }
+
     private boolean validColorSpace(PDColorSpace colorSpace, ColorSpaceType expectedIccType)
             throws ContentStreamException
     {
@@ -394,32 +477,28 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
     private boolean validColorSpaceDestOutputProfile(ColorSpaceType expectedType)
             throws ContentStreamException
     {
-        boolean result = false;
-        ICCProfileWrapper profileWrapper;
         try
         {
-            profileWrapper = ICCProfileWrapper.getOrSearchICCProfile(context);
-            if (profileWrapper != null)
+            ICCProfileWrapper profileWrapper = ICCProfileWrapper.getOrSearchICCProfile(context);
+            if (profileWrapper == null)
             {
-                switch (expectedType)
-                {
-                case RGB:
-                    result = profileWrapper.isRGBColorSpace();
-                    break;
-                case CMYK:
-                    result = profileWrapper.isCMYKColorSpace();
-                    break;
-                default:
-                    result = true;
-                    break;
-                }
+                return false;
             }
+            switch (expectedType)
+            {
+                case RGB:
+                    return profileWrapper.isRGBColorSpace();
+                case CMYK:
+                    return profileWrapper.isCMYKColorSpace();
+                default:
+                    return true;
+            }
+
         }
         catch (ValidationException e)
         {
             throw new ContentStreamException(e);
         }
-        return result;
     }
 
     /*
@@ -480,7 +559,7 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
      * @param arguments
      * @throws IOException
      */
-    protected void checkSetColorSpaceOperators(Operator operator, List<?> arguments) throws IOException
+    protected void checkSetColorSpaceOperators(Operator operator, List<COSBase> arguments) throws IOException
     {
         if (!("CS".equals(operator.getName()) || "cs".equals(operator.getName())))
         {
@@ -488,11 +567,7 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
         }
 
         String colorSpaceName;
-        if (arguments.get(0) instanceof String)
-        {
-            colorSpaceName = (String) arguments.get(0);
-        }
-        else if (arguments.get(0) instanceof COSString)
+        if (arguments.get(0) instanceof COSString)
         {
             colorSpaceName = (arguments.get(0)).toString();
         }
@@ -502,7 +577,9 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
         }
         else
         {
-            registerError("The operand doesn't have the expected type", ERROR_GRAPHIC_UNEXPECTED_VALUE_FOR_KEY);
+            registerError("The operand " + arguments.get(0) + " for colorSpace operator " + 
+                    operator.getName() + " doesn't have the expected type", 
+                    ERROR_GRAPHIC_UNEXPECTED_VALUE_FOR_KEY);
             return;
         }
 
@@ -529,7 +606,7 @@ public abstract class PreflightStreamEngine extends PDFStreamEngine
 
         if (cs == null)
         {
-            registerError("The ColorSpace is unknown", ERROR_GRAPHIC_UNEXPECTED_VALUE_FOR_KEY);
+            registerError("The ColorSpace " + colorSpaceName + " is unknown", ERROR_GRAPHIC_UNEXPECTED_VALUE_FOR_KEY);
             return;
         }
 

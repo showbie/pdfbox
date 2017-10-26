@@ -31,7 +31,7 @@ import java.util.List;
  *
  * @author Paul King
  */
-public class RubberStamp
+public final class RubberStamp
 {
     private RubberStamp()
     {
@@ -43,9 +43,9 @@ public class RubberStamp
      *
      * @param args The command line arguments.
      *
-     * @throws Exception If there is an error parsing the document.
+     * @throws IOException If there is an error parsing the document.
      */
-    public static void main( String[] args ) throws Exception
+    public static void main( String[] args ) throws IOException
     {
         if( args.length != 2 )
         {
@@ -53,10 +53,8 @@ public class RubberStamp
         }
         else
         {
-            PDDocument document = null;
-            try
+            try (PDDocument document = PDDocument.load(new File(args[0])))
             {
-                document = PDDocument.load( new File(args[0]) );
                 if( document.isEncrypted() )
                 {
                     throw new IOException( "Encrypted documents are not supported for this example" );
@@ -75,13 +73,6 @@ public class RubberStamp
 
                 document.save( args[1] );
             }
-            finally
-            {
-                if( document != null )
-                {
-                    document.close();
-                }
-            }
         }
     }
 
@@ -90,6 +81,6 @@ public class RubberStamp
      */
     private static void usage()
     {
-        System.err.println( "Usage: java org.apache.pdfbox.examples.pdmodel.RubberStamp <input-pdf> <output-pdf>" );
+        System.err.println( "Usage: java " + RubberStamp.class.getName() + " <input-pdf> <output-pdf>" );
     }
 }

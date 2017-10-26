@@ -16,6 +16,7 @@
  */
 package org.apache.pdfbox.examples.pdmodel;
 
+import java.io.IOException;
 import java.util.List;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -25,6 +26,7 @@ import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLine;
@@ -32,15 +34,21 @@ import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationSquareCircle;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDBorderStyleDictionary;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitWidthDestination;
 
 /**
  * Add annotations to pages of a PDF document.
  */
-public class AddAnnotations
+public final class AddAnnotations
 {
     static final float INCH = 72;
+
+    private AddAnnotations()
+    {
+    }
     
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args) throws IOException
     {
         if (args.length != 1)
         {
@@ -48,12 +56,15 @@ public class AddAnnotations
             System.exit(1);
         }
 
-        PDDocument document = new PDDocument();
-        try
+        try (PDDocument document = new PDDocument())
         {
-            PDPage page = new PDPage();
-            document.addPage(page);
-            List<PDAnnotation> annotations = page.getAnnotations();
+            PDPage page1 = new PDPage();
+            PDPage page2 = new PDPage();
+            PDPage page3 = new PDPage();
+            document.addPage(page1);
+            document.addPage(page2);
+            document.addPage(page3);
+            List<PDAnnotation> annotations = page1.getAnnotations();
 
             // Some basic reusable objects/constants
             // Annotations themselves can only be used once!
@@ -71,20 +82,23 @@ public class AddAnnotations
             borderULine.setStyle(PDBorderStyleDictionary.STYLE_UNDERLINE);
             borderULine.setWidth(INCH / 72); // 1 point
             
-            float pw = page.getMediaBox().getUpperRightX();
-            float ph = page.getMediaBox().getUpperRightY();
+            float pw = page1.getMediaBox().getUpperRightX();
+            float ph = page1.getMediaBox().getUpperRightY();
             
             // First add some text, two lines we'll add some annotations to this later
             PDFont font = PDType1Font.HELVETICA_BOLD;
-            PDPageContentStream contents = new PDPageContentStream(document, page);
-            contents.beginText();
-            contents.setFont(font, 18);
-            contents.newLineAtOffset(INCH, ph - INCH - 18);
-            contents.showText("PDFBox");
-            contents.newLineAtOffset(0, -(INCH / 2));
-            contents.showText("Click Here");
-            contents.endText();
-            contents.close();
+            try (PDPageContentStream contents = new PDPageContentStream(document, page1))
+            {
+                contents.beginText();
+                contents.setFont(font, 18);
+                contents.newLineAtOffset(INCH, ph - INCH - 18);
+                contents.showText("PDFBox");
+                contents.newLineAtOffset(0, -(INCH / 2));
+                contents.showText("External URL");
+                contents.newLineAtOffset(0, -(INCH / 2));
+                contents.showText("Jump to page three");
+                contents.endText();
+            }
 
             // Now add the markup annotation, a highlight to PDFBox text
             PDAnnotationTextMarkup txtMark = new PDAnnotationTextMarkup(
@@ -97,7 +111,7 @@ public class AddAnnotations
             PDRectangle position = new PDRectangle();
             position.setLowerLeftX(INCH);
             position.setLowerLeftY(ph - INCH - 18);
-            position.setUpperRightX(72 + textWidth);
+            position.setUpperRightX(INCH + textWidth);
             position.setUpperRightY(ph - INCH);
             txtMark.setRectangle(position);
 
@@ -119,16 +133,16 @@ public class AddAnnotations
             txtMark.setContents("Highlighted since it's important");
             annotations.add(txtMark);
 
-            // Now add the link annotation, so the clickme works
+            // Now add the link annotation, so the click on "External URL" works
             PDAnnotationLink txtLink = new PDAnnotationLink();
             txtLink.setBorderStyle(borderULine);
 
             // Set the rectangle containing the link
-            textWidth = font.getStringWidth("Click Here") / 1000 * 18;
+            textWidth = font.getStringWidth("External URL") / 1000 * 18;
             position = new PDRectangle();
             position.setLowerLeftX(INCH);
             position.setLowerLeftY(ph - 1.5f * INCH -20);  // down a couple of points
-            position.setUpperRightX(72 + textWidth);
+            position.setUpperRightX(INCH + textWidth);
             position.setUpperRightY(ph - 1.5f * INCH);
             txtLink.setRectangle(position);
 
@@ -163,7 +177,7 @@ public class AddAnnotations
             aSquare.setColor(red);  // Outline in red, not setting a fill
             aSquare.setBorderStyle(borderThick);
 
-            // Place the annotation on the page, we'll make this 1" (72points) square
+            // Place the annotation on the page, we'll make this 1" (72 points) square
             // 3.5" down, 1" in from the right on the page
             position = new PDRectangle(); // Reuse the variable, but note it's a new object!
             position.setLowerLeftX(pw - 2 * INCH);  // 1" in from right, 1" wide
@@ -198,13 +212,58 @@ public class AddAnnotations
             aLine.setBorderStyle(borderThick);
             aLine.setColor(black);
             annotations.add(aLine);
+            
+            
+            // Now add the link annotation, so the click on "Jump to page three" works
+            PDAnnotationLink pageLink = new PDAnnotationLink();
+            pageLink.setBorderStyle(borderULine);
 
+            // Set the rectangle containing the link
+            textWidth = font.getStringWidth("Jump to page three") / 1000 * 18;
+            position = new PDRectangle();
+            position.setLowerLeftX(INCH);
+            position.setLowerLeftY(ph - 2 * INCH - 20);  // down a couple of points
+            position.setUpperRightX(INCH + textWidth);
+            position.setUpperRightY(ph - 2 * INCH);
+            pageLink.setRectangle(position);
+
+            // add the GoTo action
+            PDActionGoTo actionGoto = new PDActionGoTo();
+            // see javadoc for other types of PDPageDestination
+            PDPageDestination dest = new PDPageFitWidthDestination();
+            // do not use setPageNumber(), this is for external destinations only
+            dest.setPage(page3);
+            actionGoto.setDestination(dest);
+            pageLink.setAction(actionGoto);
+            annotations.add(pageLink);      
+            
+
+            showPageNo(document, page1, "Page 1");
+            showPageNo(document, page2, "Page 2");
+            showPageNo(document, page3, "Page 3");
+            
             // save the PDF
             document.save(args[0]);
         }
-        finally
+    }
+
+    private static void showPageNo(PDDocument document, PDPage page, String pageText)
+            throws IOException
+    {
+        int fontSize = 10;
+
+        try (PDPageContentStream contents =
+                new PDPageContentStream(document, page, PDPageContentStream.AppendMode.PREPEND, true))
         {
-            document.close();
+            float pageWidth = page.getMediaBox().getWidth();
+            float pageHeight = page.getMediaBox().getHeight();
+            PDFont font = PDType1Font.HELVETICA;
+            contents.setFont(font, fontSize);
+            float textWidth = font.getStringWidth(pageText) / 1000 * fontSize;
+            contents.beginText();
+            contents.newLineAtOffset(pageWidth / 2 - textWidth / 2, pageHeight - INCH / 2);
+            contents.showText(pageText);
+            contents.endText();
         }
     }
 }

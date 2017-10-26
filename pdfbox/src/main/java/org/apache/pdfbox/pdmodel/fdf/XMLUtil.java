@@ -58,18 +58,16 @@ final class XMLUtil
         try
         {
             DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
+            builderFactory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            builderFactory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            builderFactory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            builderFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            builderFactory.setXIncludeAware(false);
+            builderFactory.setExpandEntityReferences(false);
             DocumentBuilder builder = builderFactory.newDocumentBuilder();
             return builder.parse(is);
         }
-        catch (FactoryConfigurationError e)
-        {
-            throw new IOException(e.getMessage(), e);
-        }
-        catch (ParserConfigurationException e)
-        {
-            throw new IOException(e.getMessage(), e);
-        }
-        catch (SAXException e)
+        catch (FactoryConfigurationError | ParserConfigurationException | SAXException e)
         {
             throw new IOException(e.getMessage(), e);
         }

@@ -631,20 +631,18 @@ public class XMPSchema extends AbstractStructuredType
         ArrayProperty array = (ArrayProperty) getAbstractProperty(arrayName);
         if (array != null)
         {
-            ArrayList<AbstractField> toDelete = new ArrayList<AbstractField>();
-            Iterator<AbstractField> it = array.getContainer().getAllProperties().iterator();
-            while (it.hasNext())
+            List<AbstractField> toDelete = new ArrayList<>();
+            for (AbstractField abstractField : array.getContainer().getAllProperties())
             {
-                AbstractSimpleProperty tmp = (AbstractSimpleProperty) it.next();
+                AbstractSimpleProperty tmp = (AbstractSimpleProperty) abstractField;
                 if (tmp.getStringValue().equals(fieldValue))
                 {
                     toDelete.add(tmp);
                 }
             }
-            Iterator<AbstractField> eraseProperties = toDelete.iterator();
-            while (eraseProperties.hasNext())
+            for (AbstractField aToDelete : toDelete)
             {
-                array.getContainer().removeProperty(eraseProperties.next());
+                array.getContainer().removeProperty(aToDelete);
             }
         }
     }
@@ -746,24 +744,21 @@ public class XMPSchema extends AbstractStructuredType
      */
     public void removeUnqualifiedArrayValue(String arrayName, AbstractField fieldValue)
     {
-        String qualifiedArrayName = arrayName;
-        ArrayProperty array = (ArrayProperty) getAbstractProperty(qualifiedArrayName);
+        ArrayProperty array = (ArrayProperty) getAbstractProperty(arrayName);
         if (array != null)
         {
-            ArrayList<AbstractField> toDelete = new ArrayList<AbstractField>();
-            Iterator<AbstractField> it = array.getContainer().getAllProperties().iterator();
-            while (it.hasNext())
+            List<AbstractField> toDelete = new ArrayList<>();
+            for (AbstractField abstractField : array.getContainer().getAllProperties())
             {
-                AbstractSimpleProperty tmp = (AbstractSimpleProperty) it.next();
+                AbstractSimpleProperty tmp = (AbstractSimpleProperty) abstractField;
                 if (tmp.equals(fieldValue))
                 {
                     toDelete.add(tmp);
                 }
             }
-            Iterator<AbstractField> eraseProperties = toDelete.iterator();
-            while (eraseProperties.hasNext())
+            for (AbstractField aToDelete : toDelete)
             {
-                array.getContainer().removeProperty(eraseProperties.next());
+                array.getContainer().removeProperty(aToDelete);
             }
         }
     }
@@ -791,8 +786,7 @@ public class XMPSchema extends AbstractStructuredType
      */
     public void addUnqualifiedSequenceValue(String simpleSeqName, String seqValue)
     {
-        String qualifiedSeqName = simpleSeqName;
-        ArrayProperty seq = (ArrayProperty) getAbstractProperty(qualifiedSeqName);
+        ArrayProperty seq = (ArrayProperty) getAbstractProperty(simpleSeqName);
         TextType li = createTextType(XmpConstants.LIST_NAME, seqValue);
         if (seq != null)
         {
@@ -839,8 +833,7 @@ public class XMPSchema extends AbstractStructuredType
      */
     public void addUnqualifiedSequenceValue(String seqName, AbstractField seqValue)
     {
-        String qualifiedSeqName = seqName;
-        ArrayProperty seq = (ArrayProperty) getAbstractProperty(qualifiedSeqName);
+        ArrayProperty seq = (ArrayProperty) getAbstractProperty(seqName);
         if (seq != null)
         {
             seq.getContainer().addProperty(seqValue);
@@ -884,24 +877,20 @@ public class XMPSchema extends AbstractStructuredType
      */
     public void removeUnqualifiedSequenceDateValue(String seqName, Calendar date)
     {
-        String qualifiedSeqName = seqName;
-        ArrayProperty seq = (ArrayProperty) getAbstractProperty(qualifiedSeqName);
+        ArrayProperty seq = (ArrayProperty) getAbstractProperty(seqName);
         if (seq != null)
         {
-            ArrayList<AbstractField> toDelete = new ArrayList<AbstractField>();
-            Iterator<AbstractField> it = seq.getContainer().getAllProperties().iterator();
-            while (it.hasNext())
+            List<AbstractField> toDelete = new ArrayList<>();
+            for (AbstractField tmp : seq.getContainer().getAllProperties())
             {
-                AbstractField tmp = it.next();
                 if (tmp instanceof DateType && ((DateType) tmp).getValue().equals(date))
                 {
                     toDelete.add(tmp);
                 }
             }
-            Iterator<AbstractField> eraseProperties = toDelete.iterator();
-            while (eraseProperties.hasNext())
+            for (AbstractField aToDelete : toDelete)
             {
-                seq.getContainer().removeProperty(eraseProperties.next());
+                seq.getContainer().removeProperty(aToDelete);
             }
         }
     }
@@ -946,12 +935,11 @@ public class XMPSchema extends AbstractStructuredType
      */
     public List<Calendar> getUnqualifiedSequenceDateValueList(String seqName)
     {
-        String qualifiedSeqName = seqName;
         List<Calendar> retval = null;
-        ArrayProperty seq = (ArrayProperty) getAbstractProperty(qualifiedSeqName);
+        ArrayProperty seq = (ArrayProperty) getAbstractProperty(seqName);
         if (seq != null)
         {
-            retval = new ArrayList<Calendar>();
+            retval = new ArrayList<>();
             for (AbstractField child : seq.getContainer().getAllProperties())
             {
                 if (child instanceof DateType)
@@ -992,8 +980,8 @@ public class XMPSchema extends AbstractStructuredType
         if (xdefaultFound)
         {
             it = alt.getAllProperties().iterator();
-            ArrayList<AbstractField> reordered = new ArrayList<AbstractField>();
-            ArrayList<AbstractField> toDelete = new ArrayList<AbstractField>();
+            List<AbstractField> reordered = new ArrayList<>();
+            List<AbstractField> toDelete = new ArrayList<>();
             reordered.add(xdefault);
             while (it.hasNext())
             {
@@ -1001,10 +989,9 @@ public class XMPSchema extends AbstractStructuredType
                 reordered.add(tmp);
                 toDelete.add(tmp);
             }
-            Iterator<AbstractField> eraseProperties = toDelete.iterator();
-            while (eraseProperties.hasNext())
+            for (AbstractField aToDelete : toDelete)
             {
-                alt.removeProperty(eraseProperties.next());
+                alt.removeProperty(aToDelete);
             }
             it = reordered.iterator();
             while (it.hasNext())
@@ -1026,8 +1013,11 @@ public class XMPSchema extends AbstractStructuredType
      */
     public void setUnqualifiedLanguagePropertyValue(String name, String language, String value)
     {
-        String qualifiedName = name;
-        AbstractField property = getAbstractProperty(qualifiedName);
+        if (language == null || language.isEmpty())
+        {
+            language = XmpConstants.X_DEFAULT;
+        }
+        AbstractField property = getAbstractProperty(name);
         ArrayProperty arrayProp;
         if (property != null)
         {
@@ -1125,7 +1115,7 @@ public class XMPSchema extends AbstractStructuredType
         {
             if (property instanceof ArrayProperty)
             {
-                List<String> retval = new ArrayList<String>();
+                List<String> retval = new ArrayList<>();
                 ArrayProperty arrayProp = (ArrayProperty) property;
                 for (AbstractField child : arrayProp.getContainer().getAllProperties())
                 {
@@ -1207,10 +1197,9 @@ public class XMPSchema extends AbstractStructuredType
         while (itNewValues.hasNext())
         {
             TextType tmpNewValue = (TextType) itNewValues.next();
-            Iterator<AbstractField> itOldValues = arrayProperty.getContainer().getAllProperties().iterator();
-            while (itOldValues.hasNext())
+            for (AbstractField abstractField : arrayProperty.getContainer().getAllProperties())
             {
-                TextType tmpOldValue = (TextType) itOldValues.next();
+                TextType tmpOldValue = (TextType) abstractField;
                 if (tmpOldValue.getStringValue().equals(tmpNewValue.getStringValue()))
                 {
                     return true;
@@ -1246,15 +1235,15 @@ public class XMPSchema extends AbstractStructuredType
         }
         if (array != null)
         {
-            return new ArrayList<AbstractField>(array.getContainer().getAllProperties());
+            return new ArrayList<>(array.getContainer().getAllProperties());
         }
         return null;
     }
 
-    protected AbstractSimpleProperty instanciateSimple(String param, Object value)
+    protected AbstractSimpleProperty instanciateSimple(String propertyName, Object value)
     {
         TypeMapping tm = getMetadata().getTypeMapping();
-        return tm.instanciateSimpleField(getClass(), null, getPrefix(), param, value);
+        return tm.instanciateSimpleField(getClass(), null, getPrefix(), propertyName, value);
     }
 
 }

@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
@@ -37,7 +36,6 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 
 /**
@@ -54,7 +52,7 @@ public class Overlay
     public enum Position
     {
         FOREGROUND, BACKGROUND
-    };
+    }
 
     private LayoutPage defaultOverlayPage;
     private LayoutPage firstPageOverlayPage;
@@ -62,16 +60,14 @@ public class Overlay
     private LayoutPage oddPageOverlayPage;
     private LayoutPage evenPageOverlayPage;
 
-    private final Map<Integer, PDDocument> specificPageOverlay = new HashMap<Integer, PDDocument>();
-    private Map<Integer, LayoutPage> specificPageOverlayPage = new HashMap<Integer, LayoutPage>();
+    private final Map<Integer, PDDocument> specificPageOverlay = new HashMap<>();
+    private Map<Integer, LayoutPage> specificPageOverlayPage = new HashMap<>();
 
     private Position position = Position.BACKGROUND;
 
     private String inputFileName = null;
     private PDDocument inputPDFDocument = null;
 
-    private String outputFilename = null;
-    
     private String defaultOverlayFilename = null;
     private PDDocument defaultOverlay = null;
 
@@ -98,54 +94,66 @@ public class Overlay
      * This will add overlays to a documents.
      * 
      * @param specificPageOverlayFile map of overlay files for specific pages
+     * 
+     * @return the resulting pdf, which has to be saved and closed be the caller
+     *  
      * @throws IOException if something went wrong
      */
-    public void overlay(Map<Integer, String> specificPageOverlayFile)
+    public PDDocument overlay(Map<Integer, String> specificPageOverlayFile)
             throws IOException
     {
-        try
+        Map<String, PDDocument> loadedDocuments = new HashMap<>();
+        Map<PDDocument, LayoutPage> layouts = new HashMap<>();
+        loadPDFs();
+        for (Map.Entry<Integer, String> e : specificPageOverlayFile.entrySet())
         {
-            loadPDFs();
-            for (Map.Entry<Integer, String> e : specificPageOverlayFile.entrySet())
+            PDDocument doc = loadedDocuments.get(e.getValue());
+            if (doc == null)
             {
-                PDDocument doc = loadPDF(e.getValue());
-                specificPageOverlay.put(e.getKey(), doc);
-                specificPageOverlayPage.put(e.getKey(), getLayoutPage(doc));
+                doc = loadPDF(e.getValue());
+                loadedDocuments.put(e.getValue(), doc);
+                layouts.put(doc, getLayoutPage(doc));
             }
-            processPages(inputPDFDocument);
-
-            inputPDFDocument.save(outputFilename);
+            specificPageOverlay.put(e.getKey(), doc);
+            specificPageOverlayPage.put(e.getKey(), layouts.get(doc));
         }
-        finally
+        processPages(inputPDFDocument);
+        return inputPDFDocument;
+    }
+
+    /**
+     * Close all input pdfs which were used for the overlay.
+     * 
+     * @throws IOException if something went wrong
+     */
+    public void close() throws IOException
+    {
+        if (defaultOverlay != null)
         {
-            if (inputPDFDocument != null)
-            {
-                inputPDFDocument.close();
-            }
-            if (defaultOverlay != null)
-            {
-                defaultOverlay.close();
-            }
-            if (firstPageOverlay != null)
-            {
-                firstPageOverlay.close();
-            }
-            if (lastPageOverlay != null)
-            {
-                lastPageOverlay.close();
-            }
-            if (allPagesOverlay != null)
-            {
-                allPagesOverlay.close();
-            }
-            if (oddPageOverlay != null)
-            {
-                oddPageOverlay.close();
-            }
-            if (evenPageOverlay != null)
-            {
-                evenPageOverlay.close();
-            }
+            defaultOverlay.close();
+        }
+        if (firstPageOverlay != null)
+        {
+            firstPageOverlay.close();
+        }
+        if (lastPageOverlay != null)
+        {
+            lastPageOverlay.close();
+        }
+        if (allPagesOverlay != null)
+        {
+            allPagesOverlay.close();
+        }
+        if (oddPageOverlay != null)
+        {
+            oddPageOverlay.close();
+        }
+        if (evenPageOverlay != null)
+        {
+            evenPageOverlay.close();
+        }
+        if (specificPageOverlay != null)
+        {
             for (Map.Entry<Integer, PDDocument> e : specificPageOverlay.entrySet())
             {
                 e.getValue().close();
@@ -258,7 +266,7 @@ public class Overlay
     private Map<Integer,LayoutPage> getLayoutPages(PDDocument doc) throws IOException
     {
         int numberOfPages = doc.getNumberOfPages();
-        Map<Integer,LayoutPage> layoutPages = new HashMap<Integer, Overlay.LayoutPage>(numberOfPages);
+        Map<Integer,LayoutPage> layoutPages = new HashMap<>(numberOfPages);
         for (int i=0;i<numberOfPages;i++)
         {
             PDPage page = doc.getPage(i);
@@ -278,27 +286,27 @@ public class Overlay
     {
         List<COSStream> contentStreams = createContentStreamList(contents);
         // concatenate streams
-        COSStream concatStream = new COSStream();
-        OutputStream out = concatStream.createUnfilteredStream();
-        for (COSStream contentStream : contentStreams)
+        COSStream concatStream = inputPDFDocument.getDocument().createCOSStream();
+        try (OutputStream out = concatStream.createOutputStream(COSName.FLATE_DECODE))
         {
-            InputStream in = contentStream.getUnfilteredStream();
-            byte[] buf = new byte[2048];
-            int n;
-            while ((n = in.read(buf)) > 0)
+            for (COSStream contentStream : contentStreams)
             {
-                out.write(buf, 0, n);
+                InputStream in = contentStream.createInputStream();
+                byte[] buf = new byte[2048];
+                int n;
+                while ((n = in.read(buf)) > 0)
+                {
+                    out.write(buf, 0, n);
+                }
+                out.flush();
             }
-            out.flush();
         }
-        out.close();
-        concatStream.setFilters(COSName.FLATE_DECODE);
         return concatStream;
     }
 
     private List<COSStream> createContentStreamList(COSBase contents) throws IOException
     {
-        List<COSStream> contentStreams = new ArrayList<COSStream>();
+        List<COSStream> contentStreams = new ArrayList<>();
         if (contents instanceof COSStream)
         {
             contentStreams.add((COSStream) contents);
@@ -418,7 +426,7 @@ public class Overlay
 
     private COSName createOverlayXObject(PDPage page, LayoutPage layoutPage, COSStream contentStream)
     {
-        PDFormXObject xobjForm = new PDFormXObject(new PDStream(contentStream));
+        PDFormXObject xobjForm = new PDFormXObject(contentStream);
         xobjForm.setResources(new PDResources(layoutPage.overlayResources));
         xobjForm.setFormType(1);
         xobjForm.setBBox( layoutPage.overlayMediaBox.createRetranslatedRectangle());
@@ -461,15 +469,15 @@ public class Overlay
         }
         return stringValue;
     }
-
     
     private COSStream createStream(String content) throws IOException
     {
-        COSStream stream = new COSStream();
-        OutputStream out = stream.createUnfilteredStream();
-        out.write(content.getBytes("ISO-8859-1"));
-        out.close();
-        stream.setFilters(COSName.FLATE_DECODE);
+        COSStream stream = inputPDFDocument.getDocument().createCOSStream();
+        try (OutputStream out = stream.createOutputStream(
+                content.length() > 20 ? COSName.FLATE_DECODE : null))
+        {
+            out.write(content.getBytes("ISO-8859-1"));
+        }
         return stream;
     }
 
@@ -511,26 +519,6 @@ public class Overlay
     public String getInputFile()
     {
         return inputFileName;
-    }
-
-    /**
-     * Sets the output file.
-     * 
-     * @param outputFile the output file
-     */
-    public void setOutputFile(String outputFile)
-    {
-        outputFilename = outputFile;
-    }
-
-    /**
-     * Returns the output file.
-     * 
-     * @return the output file
-     */
-    public String getOutputFile()
-    {
-        return outputFilename;
     }
 
     /**

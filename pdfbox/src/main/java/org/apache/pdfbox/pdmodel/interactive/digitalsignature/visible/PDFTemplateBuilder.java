@@ -41,8 +41,16 @@ public interface PDFTemplateBuilder
     /**
      * In order to create Affine Transform, using parameters.
      * @param params
+     * @deprecated use {@link #createAffineTransform(java.awt.geom.AffineTransform) }
      */
+    @Deprecated
     void createAffineTransform(byte[] params);
+
+    /**
+     * In order to create Affine Transform, using parameters.
+     * @param affineTransform
+     */
+    void createAffineTransform(AffineTransform affineTransform);
 
     /**
      * Creates specified size page.
@@ -75,14 +83,17 @@ public interface PDFTemplateBuilder
     void createSignatureField(PDAcroForm acroForm) throws IOException;
 
     /**
-     * Creates PDSignatureField.
-     * 
+     * Creates the signature with the given name and assign it to the signature field parameter and
+     * assign the page parameter to the widget.
+     *
      * @param pdSignatureField
      * @param page
-     * @param signatureName
+     * @param signerName the name of the person or authority signing the document. According to the
+     * PDF specification, this value should be used only when it is not possible to extract the name
+     * from the signature.
      * @throws IOException
      */
-    void createSignature(PDSignatureField pdSignatureField, PDPage page, String signatureName)
+    void createSignature(PDSignatureField pdSignatureField, PDPage page, String signerName)
             throws IOException;
 
     /**
@@ -96,7 +107,7 @@ public interface PDFTemplateBuilder
             throws IOException;
 
     /**
-     * Creates SingatureRectangle.
+     * Creates SignatureRectangle.
      * 
      * @param signatureField
      * @param properties
@@ -122,7 +133,7 @@ public interface PDFTemplateBuilder
      * 
      * @param params
      */
-    void createFormaterRectangle(byte[] params);
+    void createFormatterRectangle(byte[] params);
 
     /**
      * 
@@ -180,7 +191,7 @@ public interface PDFTemplateBuilder
      * @param innerForm
      * @param holderFormResources
      */
-    void insertInnerFormToHolerResources(PDFormXObject innerForm,
+    void insertInnerFormToHolderResources(PDFormXObject innerForm,
             PDResources holderFormResources);
 
     /**
@@ -210,6 +221,16 @@ public interface PDFTemplateBuilder
             PDImageXObject img) throws IOException;
 
     /**
+     * Creates the background layer form (n0).
+     *
+     * @param innerFormResource
+     * @param formatter
+     * @throws IOException
+     */
+    void createBackgroundLayerForm(PDResources innerFormResource, PDRectangle formatter)
+            throws IOException;
+
+    /**
      * Inject procSetArray
      * 
      * @param innerForm
@@ -227,16 +248,16 @@ public interface PDFTemplateBuilder
      * injects appearance streams
      * 
      * @param holderFormStream
-     * @param innterFormStream
+     * @param innerFormStream
      * @param imageFormStream
-     * @param imageObjectName
+     * @param imageFormName
      * @param imageName
      * @param innerFormName
      * @param properties
      * @throws IOException
      */
-    void injectAppearanceStreams(PDStream holderFormStream, PDStream innterFormStream,
-            PDStream imageFormStream, COSName imageObjectName, COSName imageName,
+    void injectAppearanceStreams(PDStream holderFormStream, PDStream innerFormStream,
+            PDStream imageFormStream, COSName imageFormName, COSName imageName,
             COSName innerFormName, PDVisibleSignDesigner properties) throws IOException;
 
     /**

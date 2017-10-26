@@ -88,7 +88,7 @@ public class FDFAnnotationInk extends FDFAnnotation
             {
                 throw new IOException("Error: missing element 'gesture'");
             }
-            List<float[]> inklist = new ArrayList<float[]>();
+            List<float[]> inklist = new ArrayList<>();
             for (int i = 0; i < gestures.getLength(); i++)
             {
                 Node node = gestures.item(i);
@@ -104,6 +104,7 @@ public class FDFAnnotationInk extends FDFAnnotation
                     inklist.add(values);
                 }
             }
+            setInkList(inklist);
         }
         catch (XPathExpressionException e)
         {
@@ -119,7 +120,7 @@ public class FDFAnnotationInk extends FDFAnnotation
      * 
      * @param inklist the List of arrays representing the paths.
      */
-    public void setInkList(List<float[]> inklist)
+    public final void setInkList(List<float[]> inklist)
     {
         COSArray newInklist = new COSArray();
         for (float[] array : inklist)
@@ -142,7 +143,7 @@ public class FDFAnnotationInk extends FDFAnnotation
         COSArray array = (COSArray) annot.getDictionaryObject(COSName.INKLIST);
         if (array != null)
         {
-            List<float[]> retval = new ArrayList<float[]>();
+            List<float[]> retval = new ArrayList<>();
             for (COSBase entry : array)
             {
                 retval.add(((COSArray) entry).toFloatArray());

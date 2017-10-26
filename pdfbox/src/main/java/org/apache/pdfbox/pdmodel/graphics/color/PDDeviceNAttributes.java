@@ -64,12 +64,12 @@ public final class PDDeviceNAttributes
 
     /**
      * Returns a map of colorants and their associated Separation color space.
-     * @return map of colorants to color spaces
+     * @return map of colorants to color spaces, never null.
      * @throws IOException If there is an error reading a color space
      */
     public Map<String, PDSeparation> getColorants() throws IOException
     {
-        Map<String,PDSeparation> actuals = new HashMap<String, PDSeparation>();
+        Map<String,PDSeparation> actuals = new HashMap<>();
         COSDictionary colorants = (COSDictionary)dictionary.getDictionaryObject(COSName.COLORANTS);
         if(colorants == null)
         {
@@ -81,7 +81,7 @@ public final class PDDeviceNAttributes
             COSBase value = colorants.getDictionaryObject(name);
             actuals.put(name.getName(), (PDSeparation)PDColorSpace.create(value));
         }
-        return new COSDictionaryMap<String, PDSeparation>(actuals, colorants);
+        return new COSDictionaryMap<>(actuals, colorants);
     }
 
     /**

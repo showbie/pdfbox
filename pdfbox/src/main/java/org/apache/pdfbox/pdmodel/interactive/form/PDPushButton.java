@@ -16,6 +16,7 @@
  */
 package org.apache.pdfbox.pdmodel.interactive.form;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -66,10 +67,28 @@ public class PDPushButton extends PDButton
             throw new IllegalArgumentException("A PDPushButton shall not use the Opt entry in the field dictionary");
         }
     }
+    
+    @Override
+    public String getValue()
+    {
+        return "";
+    }
+
+    @Override
+    public String getDefaultValue()
+    {
+        return "";
+    }
 
     @Override
     public String getValueAsString()
     {
-        return "";
+        return getValue();
     }
+    
+    @Override
+    void constructAppearances() throws IOException
+    {
+        // TODO: add appearance handler to generate/update appearance
+    } 
 }

@@ -21,6 +21,7 @@
 
 package org.apache.pdfbox.preflight;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -94,9 +95,9 @@ public class PreflightConfiguration
      */
     private boolean lazyValidation = false;
 
-    private final Map<String, Class<? extends ValidationProcess>> processes = new LinkedHashMap<String, Class<? extends ValidationProcess>>();
+    private final Map<String, Class<? extends ValidationProcess>> processes = new LinkedHashMap<>();
     // TODO use annotation to mark these validation processes as inner page validation and factorize the access method
-    private final Map<String, Class<? extends ValidationProcess>> innerProcesses = new LinkedHashMap<String, Class<? extends ValidationProcess>>();
+    private final Map<String, Class<? extends ValidationProcess>> innerProcesses = new LinkedHashMap<>();
 
     /**
      * Define the AnnotationFactory used by ValidationProcess
@@ -182,13 +183,11 @@ public class PreflightConfiguration
 
         try
         {
-            return clazz.newInstance();
+            return clazz.getDeclaredConstructor().newInstance();
         }
-        catch (InstantiationException e)
-        {
-            throw new ValidationException(processName + " can't be created", e);
-        }
-        catch (IllegalAccessException e)
+        catch (InstantiationException | IllegalAccessException |
+               NoSuchMethodException | SecurityException | IllegalArgumentException | 
+               InvocationTargetException e)
         {
             throw new ValidationException(processName + " can't be created", e);
         }

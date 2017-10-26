@@ -28,7 +28,6 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
@@ -63,10 +62,8 @@ public class RubberStampWithImage
         }
         else 
         {
-            PDDocument document = null;
-            try
+            try (PDDocument document = PDDocument.load(new File(args[0])))
             {
-                document = PDDocument.load( new File(args[0]) );
                 if( document.isEncrypted() )
                 {
                     throw new IOException( "Encrypted documents are not supported for this example" );
@@ -101,18 +98,18 @@ public class RubberStampWithImage
                     rect.setUpperRightY(lowerLeftY + formHeight);
 
                     // Create a PDFormXObject
-                    PDStream stream = new PDStream(document);
-                    OutputStream os = stream.createOutputStream();
-                    PDFormXObject form = new PDFormXObject(stream);
+                    PDFormXObject form = new PDFormXObject(document);
                     form.setResources(new PDResources());
                     form.setBBox(rect);
                     form.setFormType(1);
 
                     // adjust the image to the target rectangle and add it to the stream
-                    drawXObject(ximage, form.getResources(), os, lowerLeftX, lowerLeftY, imgWidth, imgHeight);
-                    os.close();
+                    try (OutputStream os = form.getStream().createOutputStream())
+                    {
+                        drawXObject(ximage, form.getResources(), os, lowerLeftX, lowerLeftY, imgWidth, imgHeight);
+                    }
 
-                    PDAppearanceStream myDic = new PDAppearanceStream(form.getCOSStream());
+                    PDAppearanceStream myDic = new PDAppearanceStream(form.getCOSObject());
                     PDAppearanceDictionary appearance = new PDAppearanceDictionary(new COSDictionary());
                     appearance.setNormalAppearance(myDic);
                     rubberStamp.setAppearance(appearance);
@@ -123,13 +120,6 @@ public class RubberStampWithImage
                 
                 }
                 document.save( args[1] );
-            }
-            finally
-            {
-                if( document != null )
-                {
-                    document.close();
-                }
             }
         }
     }
@@ -173,9 +163,9 @@ public class RubberStampWithImage
      *
      * @param args The command line arguments.
      *
-     * @throws Exception If there is an error parsing the document.
+     * @throws IOException If there is an error parsing the document.
      */
-    public static void main( String[] args ) throws Exception
+    public static void main( String[] args ) throws IOException
     {
         RubberStampWithImage rubberStamp = new RubberStampWithImage();
         rubberStamp.doIt(args);

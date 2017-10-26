@@ -21,7 +21,6 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
 import java.security.GeneralSecurityException;
@@ -29,41 +28,13 @@ import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
 import java.security.UnrecoverableKeyException;
-import java.security.cert.Certificate;
-import java.util.ArrayList;
+import java.security.cert.CertificateException;
 import java.util.Calendar;
-import java.util.Collection;
-import java.util.Enumeration;
-import java.util.List;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.interactive.digitalsignature.ExternalSigningSupport;
 import org.apache.pdfbox.pdmodel.interactive.digitalsignature.PDSignature;
-import org.apache.pdfbox.pdmodel.interactive.digitalsignature.SignatureInterface;
-import org.bouncycastle.asn1.ASN1Encodable;
-import org.bouncycastle.asn1.ASN1EncodableVector;
-import org.bouncycastle.asn1.ASN1ObjectIdentifier;
-import org.bouncycastle.asn1.ASN1Primitive;
-import org.bouncycastle.asn1.DERSet;
-import org.bouncycastle.asn1.cms.Attribute;
-import org.bouncycastle.asn1.cms.AttributeTable;
-import org.bouncycastle.asn1.cms.Attributes;
-import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
-import org.bouncycastle.cert.X509CertificateHolder;
-import org.bouncycastle.cert.jcajce.JcaCertStore;
-import org.bouncycastle.cms.CMSException;
-import org.bouncycastle.cms.CMSSignedData;
-import org.bouncycastle.cms.CMSSignedDataGenerator;
-import org.bouncycastle.cms.SignerInformation;
-import org.bouncycastle.cms.SignerInformationStore;
-import org.bouncycastle.cms.jcajce.JcaSignerInfoGeneratorBuilder;
-import org.bouncycastle.operator.ContentSigner;
-import org.bouncycastle.operator.OperatorCreationException;
-import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
-import org.bouncycastle.operator.jcajce.JcaDigestCalculatorProviderBuilder;
-import org.bouncycastle.tsp.TSPException;
-import org.bouncycastle.util.Store;
 
 /**
  * An example for singing a PDF with bouncy castle.
@@ -76,39 +47,24 @@ import org.bouncycastle.util.Store;
  * @author Vakhtang Koroghlishvili
  * @author John Hewson
  */
-public class CreateSignature implements SignatureInterface
+public class CreateSignature extends CreateSignatureBase
 {
-    private final PrivateKey privateKey;
-    private final Certificate certificate;
-    private TSAClient tsaClient;
 
     /**
      * Initialize the signature creator with a keystore and certficate password.
-     * @param keystore the keystore containing the signing certificate
-     * @param password the password for recovering the key
+     *
+     * @param keystore the pkcs12 keystore containing the signing certificate
+     * @param pin the password for recovering the key
      * @throws KeyStoreException if the keystore has not been initialized (loaded)
      * @throws NoSuchAlgorithmException if the algorithm for recovering the key cannot be found
      * @throws UnrecoverableKeyException if the given password is wrong
+     * @throws CertificateException if the certificate is not valid as signing time
+     * @throws IOException if no certificate could be found
      */
-    public CreateSignature(KeyStore keystore, char[] password)
-            throws KeyStoreException, UnrecoverableKeyException, NoSuchAlgorithmException
+    public CreateSignature(KeyStore keystore, char[] pin)
+            throws KeyStoreException, UnrecoverableKeyException, NoSuchAlgorithmException, CertificateException, IOException
     {
-        // grabs the first alias from the keystore and get the private key. An
-        // TODO alternative method or constructor could be used for setting a specific
-        // alias that should be used.
-        Enumeration<String> aliases = keystore.aliases();
-        String alias;
-        if (aliases.hasMoreElements())
-        {
-            alias = aliases.nextElement();
-        }
-        else
-        {
-            throw new KeyStoreException("Keystore is empty");
-        }
-        privateKey = (PrivateKey) keystore.getKey(alias, password);
-        Certificate[] certificateChain = keystore.getCertificateChain(alias);
-        certificate = certificateChain[0];
+        super(keystore, pin);
     }
 
     /**
@@ -149,15 +105,22 @@ public class CreateSignature implements SignatureInterface
         FileOutputStream fos = new FileOutputStream(outFile);
 
         // sign
-        PDDocument doc = PDDocument.load(inFile);
-        signDetached(doc, fos, tsaClient);
-        doc.close();
+        try (PDDocument doc = PDDocument.load(inFile))
+        {
+            signDetached(doc, fos, tsaClient);
+        }
     }
 
     public void signDetached(PDDocument document, OutputStream output, TSAClient tsaClient)
             throws IOException
     {
-        this.tsaClient = tsaClient;
+        setTsaClient(tsaClient);
+
+        int accessPermissions = SigUtils.getMDPPermission(document);
+        if (accessPermissions == 1)
+        {
+            throw new IllegalStateException("No changes to the document are permitted due to DocMDP transform parameters dictionary");
+        }     
 
         // create signature dictionary
         PDSignature signature = new PDSignature();
@@ -171,118 +134,30 @@ public class CreateSignature implements SignatureInterface
         // the signing date, needed for valid signature
         signature.setSignDate(Calendar.getInstance());
 
-        // register signature dictionary and sign interface
-        document.addSignature(signature, this);
-
-        // write incremental (only for signing purpose)
-        document.saveIncremental(output);
-    }
-
-    /**
-     * We just extend CMS signed Data
-     *
-     * @param signedData -Generated CMS signed data
-     * @return CMSSignedData - Extended CMS signed data
-     */
-    private CMSSignedData signTimeStamps(CMSSignedData signedData)
-            throws IOException, TSPException
-    {
-        SignerInformationStore signerStore = signedData.getSignerInfos();
-        List<SignerInformation> newSigners = new ArrayList<SignerInformation>();
-
-        for (SignerInformation signer : (Collection<SignerInformation>)signerStore.getSigners())
+        // Optional: certify 
+        if (accessPermissions == 0)
         {
-            newSigners.add(signTimeStamp(signer));
+            SigUtils.setMDPPermission(document, signature, 2);
+        }        
+
+        if (isExternalSigning())
+        {
+            System.out.println("Sign externally...");
+            document.addSignature(signature);
+            ExternalSigningSupport externalSigning =
+                    document.saveIncrementalForExternalSigning(output);
+            // invoke external signature service
+            byte[] cmsSignature = sign(externalSigning.getContent());
+            // set signature bytes received from the service
+            externalSigning.setSignature(cmsSignature);
         }
-
-        // TODO do we have to return a new store?
-        return CMSSignedData.replaceSigners(signedData, new SignerInformationStore(newSigners));
-    }
-
-    /**
-     * We are extending CMS Signature
-     *
-     * @param signer information about signer
-     * @return information about SignerInformation
-     */
-    private SignerInformation signTimeStamp(SignerInformation signer)
-            throws IOException, TSPException
-    {
-        AttributeTable unsignedAttributes = signer.getUnsignedAttributes();
-
-        ASN1EncodableVector vector = new ASN1EncodableVector();
-        if (unsignedAttributes != null)
+        else
         {
-            vector = unsignedAttributes.toASN1EncodableVector();
-        }
+            // register signature dictionary and sign interface
+            document.addSignature(signature, this);
 
-        byte[] token = tsaClient.getTimeStampToken(signer.getSignature());
-        ASN1ObjectIdentifier oid = PKCSObjectIdentifiers.id_aa_signatureTimeStampToken;
-        ASN1Encodable signatureTimeStamp = new Attribute(oid, new DERSet(ASN1Primitive.fromByteArray(token)));
-
-        vector.add(signatureTimeStamp);
-        Attributes signedAttributes = new Attributes(vector);
-
-        SignerInformation newSigner = SignerInformation.replaceUnsignedAttributes(
-                signer, new AttributeTable(signedAttributes));
-
-        // TODO can this actually happen?
-        if (newSigner == null)
-        {
-            return signer;
-        }
-
-        return newSigner;
-    }
-
-    /**
-     * SignatureInterface implementation.
-     *
-     * This method will be called from inside of the pdfbox and create the PKCS #7 signature.
-     * The given InputStream contains the bytes that are given by the byte range.
-     *
-     * This method is for internal use only. <-- TODO this method should be private
-     *
-     * Use your favorite cryptographic library to implement PKCS #7 signature creation.
-     */
-    @Override
-    public byte[] sign(InputStream content) throws IOException
-    {
-        try
-        {
-            List<Certificate> certList = new ArrayList<Certificate>();
-            certList.add(certificate);
-            Store certs = new JcaCertStore(certList);
-            CMSSignedDataGenerator gen = new CMSSignedDataGenerator();
-            org.bouncycastle.asn1.x509.Certificate cert =
-                    org.bouncycastle.asn1.x509.Certificate.getInstance(ASN1Primitive.fromByteArray(certificate.getEncoded()));
-            ContentSigner sha1Signer = new JcaContentSignerBuilder("SHA256WithRSA").build(privateKey);
-            gen.addSignerInfoGenerator(new JcaSignerInfoGeneratorBuilder(
-                    new JcaDigestCalculatorProviderBuilder().build()).build(sha1Signer, new X509CertificateHolder(cert)));
-            gen.addCertificates(certs);
-            CMSProcessableInputStream msg = new CMSProcessableInputStream(content);
-            CMSSignedData signedData = gen.generate(msg, false);
-            if (tsaClient != null)
-            {
-                signedData = signTimeStamps(signedData);
-            }
-            return signedData.getEncoded();
-        }
-        catch (GeneralSecurityException e)
-        {
-            throw new IOException(e);
-        }
-        catch (CMSException e)
-        {
-            throw new IOException(e);
-        }
-        catch (TSPException e)
-        {
-            throw new IOException(e);
-        }
-        catch (OperatorCreationException e)
-        {
-            throw new IOException(e);
+            // write incremental (only for signing purpose)
+            document.saveIncremental(output);
         }
     }
 
@@ -295,7 +170,8 @@ public class CreateSignature implements SignatureInterface
         }
 
         String tsaUrl = null;
-        for(int i = 0; i < args.length; i++)
+        boolean externalSig = false;
+        for (int i = 0; i < args.length; i++)
         {
             if (args[i].equals("-tsa"))
             {
@@ -303,8 +179,13 @@ public class CreateSignature implements SignatureInterface
                 if (i >= args.length)
                 {
                     usage();
+                    System.exit(1);
                 }
                 tsaUrl = args[i];
+            }
+            if (args[i].equals("-e"))
+            {
+                externalSig = true;
             }
         }
 
@@ -324,6 +205,7 @@ public class CreateSignature implements SignatureInterface
 
         // sign PDF
         CreateSignature signing = new CreateSignature(keystore, password);
+        signing.setExternalSigning(externalSig);
 
         File inFile = new File(args[2]);
         String name = inFile.getName();
@@ -338,6 +220,7 @@ public class CreateSignature implements SignatureInterface
         System.err.println("usage: java " + CreateSignature.class.getName() + " " +
                            "<pkcs12_keystore> <password> <pdf_to_sign>\n" + "" +
                            "options:\n" +
-                           "  -tsa <url>    sign timestamp using the given TSA server");
+                           "  -tsa <url>    sign timestamp using the given TSA server\n" +
+                           "  -e            sign using external signature creation scenario");
     }
 }

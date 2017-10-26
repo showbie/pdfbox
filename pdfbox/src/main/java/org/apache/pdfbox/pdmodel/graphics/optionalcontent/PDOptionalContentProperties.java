@@ -36,7 +36,7 @@ public class PDOptionalContentProperties implements COSObjectable
     /**
      * Enumeration for the BaseState dictionary entry on the "D" dictionary.
      */
-    public static enum BaseState
+    public enum BaseState
     {
 
         /** The "ON" value. */
@@ -173,12 +173,11 @@ public class PDOptionalContentProperties implements COSObjectable
      */
     public Collection<PDOptionalContentGroup> getOptionalContentGroups()
     {
-        Collection<PDOptionalContentGroup> coll = new java.util.ArrayList<PDOptionalContentGroup>();
+        Collection<PDOptionalContentGroup> coll = new java.util.ArrayList<>();
         COSArray ocgs = getOCGs();
         for (COSBase base : ocgs)
         {
-            COSObject obj = (COSObject)base; //Children must be indirect references
-            coll.add(new PDOptionalContentGroup((COSDictionary)obj.getObject()));
+            coll.add(new PDOptionalContentGroup(toDictionary(base)));
         }
         return coll;
     }

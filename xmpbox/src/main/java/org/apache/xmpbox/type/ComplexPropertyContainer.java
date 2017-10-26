@@ -43,7 +43,7 @@ public class ComplexPropertyContainer
      */
     public ComplexPropertyContainer()
     {
-        properties = new ArrayList<AbstractField>();
+        properties = new ArrayList<>();
     }
 
     /**
@@ -97,18 +97,18 @@ public class ComplexPropertyContainer
     }
 
     /**
-     * Return all properties with this specified localName
+     * Return all properties with this specified localName.
      * 
      * @param localName
      *            the local name wanted
-     * @return All properties with local name which match with localName given
+     * @return All properties with local name which match with localName given, or null if there are none.
      */
     public List<AbstractField> getPropertiesByLocalName(String localName)
     {
         List<AbstractField> absFields = getAllProperties();
         if (absFields != null)
         {
-            List<AbstractField> list = new ArrayList<AbstractField>();
+            List<AbstractField> list = new ArrayList<>();
             for (AbstractField abstractField : absFields)
             {
                 if (abstractField.getPropertyName().equals(localName))
@@ -126,17 +126,16 @@ public class ComplexPropertyContainer
             }
         }
         return null;
-
     }
 
     /**
-     * Check if two property are similar
+     * Check if two properties are equal.
      * 
      * @param prop1
      *            First property
      * @param prop2
      *            Second property
-     * @return True if these properties are equals
+     * @return True if these properties are equal.
      */
     public boolean isSameProperty(AbstractField prop1, AbstractField prop2)
     {
@@ -193,6 +192,28 @@ public class ComplexPropertyContainer
         if (containsProperty(property))
         {
             properties.remove(property);
+        }
+    }
+
+    /**
+     * Remove all properties with a specified LocalName.
+     * 
+     * @param localName The name for which to remove all.
+     */
+    public void removePropertiesByName(String localName)
+    {
+        if (properties.isEmpty())
+        {
+            return;
+        }
+        List<AbstractField> propList = getPropertiesByLocalName(localName);
+        if (propList == null)
+        {
+            return;
+        }
+        for (AbstractField field : propList)
+        {
+            properties.remove(field);
         }
     }
 }

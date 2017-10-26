@@ -89,19 +89,24 @@ public final class OTFParser extends TTFParser
     protected TTFTable readTable(TrueTypeFont font, String tag)
     {
         // todo: this is a stub, a full implementation is needed
+        switch (tag)
+        {
+            case "BASE":
+            case "GDEF":
+            case "GPOS":
+            case "GSUB":
+            case "JSTF":
+                return new OTLTable(font);
+            case "CFF ":
+                return new CFFTable(font);
+            default:
+                return super.readTable(font, tag);
+        }
+    }
 
-        if (tag.equals("BASE") || tag.equals("GDEF") || tag.equals("GPOS") ||
-            tag.equals("GSUB") || tag.equals("JSTF"))
-        {
-            return new OTLTable(font);
-        }
-        else if (tag.equals("CFF "))
-        {
-            return new CFFTable(font);
-        }
-        else
-        {
-            return super.readTable(font, tag);
-        }
+    @Override
+    protected boolean allowCFF()
+    {
+        return true;
     }
 }

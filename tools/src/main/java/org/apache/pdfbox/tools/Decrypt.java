@@ -21,6 +21,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
 
@@ -35,6 +36,13 @@ public final class Decrypt
     private static final String ALIAS = "-alias";
     private static final String PASSWORD = "-password";
     private static final String KEYSTORE = "-keyStore";
+    
+    private String password;
+    private String infile;
+    private String outfile;
+    private String alias;
+    private String keyStore;
+
 
     private Decrypt()
     {
@@ -44,30 +52,26 @@ public final class Decrypt
      *
      * @param args The command-line arguments.
      *
-     * @throws Exception If there is an error decrypting the document.
+     * @throws IOException If there is an error decrypting the document.
      */
-    public static void main( String[] args ) throws Exception
+    public static void main(String[] args) throws IOException
     {
         // suppress the Dock icon on OS X
         System.setProperty("apple.awt.UIElement", "true");
 
         Decrypt decrypt = new Decrypt();
-        decrypt.decrypt( args );
+        decrypt.parseCommandLineArgs(args);
+        decrypt.decrypt();
     }
-
-    private void decrypt( String[] args ) throws Exception
+    
+    private void parseCommandLineArgs(String[] args)
     {
-        if( args.length < 2 || args.length > 5 )
+        if( args.length < 1 || args.length > 8 )
         {
             usage();
         }
         else
         {
-            String password = null;
-            String infile = null;
-            String outfile = null;
-            String alias = null;
-            String keyStore = null;
             for( int i=0; i<args.length; i++ )
             {
                 if( args[i].equals( ALIAS ) )
@@ -122,44 +126,47 @@ public final class Decrypt
             {
                 password = "";
             }
+        }
+    }
 
-
-            PDDocument document = null;
-            try
+    private void decrypt() throws IOException
+    {
+        PDDocument document = null;
+        InputStream keyStoreStream = null;
+        try
+        {
+            if( keyStore != null )
             {
-                InputStream keyStoreStream = null;
-                if( keyStore != null )
+                keyStoreStream = new FileInputStream(keyStore);
+            }
+            document = PDDocument.load(new File(infile), password, keyStoreStream, alias);
+            
+            if (document.isEncrypted())
+            {
+                AccessPermission ap = document.getCurrentAccessPermission();
+                if(ap.isOwnerPermission())
                 {
-                    keyStoreStream = new FileInputStream(keyStore);
-                }
-                document = PDDocument.load(new File(infile), password, keyStoreStream, alias);
-                
-                if (document.isEncrypted())
-                {
-                    AccessPermission ap = document.getCurrentAccessPermission();
-                    if(ap.isOwnerPermission())
-                    {
-                        document.setAllSecurityToBeRemoved(true);
-                        document.save( outfile );
-                    }
-                    else
-                    {
-                        throw new IOException(
-                                "Error: You are only allowed to decrypt a document with the owner password." );
-                    }
+                    document.setAllSecurityToBeRemoved(true);
+                    document.save( outfile );
                 }
                 else
                 {
-                    System.err.println( "Error: Document is not encrypted." );
+                    throw new IOException(
+                            "Error: You are only allowed to decrypt a document with the owner password." );
                 }
             }
-            finally
+            else
             {
-                if( document != null )
-                {
-                    document.close();
-                }
+                System.err.println( "Error: Document is not encrypted." );
             }
+        }
+        finally
+        {
+            if( document != null )
+            {
+                document.close();
+            }
+            IOUtils.closeQuietly(keyStoreStream);
         }
     }
 
@@ -168,13 +175,15 @@ public final class Decrypt
      */
     private static void usage()
     {
-        System.err.println( "usage: java -jar pdfbox-app-x.y.z.jar Decrypt " +
-                            "[options] <inputfile> [outputfile]" );
-        System.err.println( "-alias      The alias of the key in the certificate file " +
-                                         "(mandatory if several keys are available)");
-        System.err.println( "-password   The password to open the certificate and extract the private key from it." );
-        System.err.println( "-keyStore   The KeyStore that holds the certificate." );
-        System.exit( -1 );
+        
+        String message = "Usage: java -jar pdfbox-app-x.y.z.jar Decrypt [options] <inputfile> [outputfile]\n"
+                + "\nOptions:\n"
+                + "  -alias    : The alias of the key in the certificate file (mandatory if several keys are available\n"
+                + "  -password : The password to open the certificate and extract the private key from it.\n"
+                + "  -keyStore : The KeyStore that holds the certificate.";
+        
+        System.err.println(message);
+        System.exit(1);
     }
 
 }

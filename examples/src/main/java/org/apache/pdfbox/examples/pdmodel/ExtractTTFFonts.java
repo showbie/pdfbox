@@ -19,6 +19,8 @@ package org.apache.pdfbox.examples.pdmodel;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.io.IOUtils;
@@ -39,7 +41,7 @@ import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
  * This will extract all true type-fonts of a pdf.
  * 
  */
-public class ExtractTTFFonts
+public final class ExtractTTFFonts
 {
     private int fontCounter = 1;
 
@@ -56,15 +58,15 @@ public class ExtractTTFFonts
      * 
      * @param args The command-line arguments.
      * 
-     * @throws Exception If there is an error decrypting the document.
+     * @throws IOException If there is an error decrypting the document.
      */
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args) throws IOException
     {
         ExtractTTFFonts extractor = new ExtractTTFFonts();
         extractor.extractFonts(args);
     }
 
-    private void extractFonts(String[] args) throws Exception
+    private void extractFonts(String[] args) throws IOException
     {
         if (args.length < 1 || args.length > 4)
         {
@@ -78,34 +80,33 @@ public class ExtractTTFFonts
             boolean addKey = false;
             for (int i = 0; i < args.length; i++)
             {
-                if (args[i].equals(PASSWORD))
+                switch (args[i])
                 {
-                    i++;
-                    if (i >= args.length)
-                    {
-                        usage();
-                    }
-                    password = args[i];
-                }
-                else if (args[i].equals(PREFIX))
-                {
-                    i++;
-                    if (i >= args.length)
-                    {
-                        usage();
-                    }
-                    prefix = args[i];
-                }
-                else if (args[i].equals(ADDKEY))
-                {
-                    addKey = true;
-                }
-                else
-                {
-                    if (pdfFile == null)
-                    {
-                        pdfFile = args[i];
-                    }
+                    case PASSWORD:
+                        i++;
+                        if (i >= args.length)
+                        {
+                            usage();
+                        }
+                        password = args[i];
+                        break;
+                    case PREFIX:
+                        i++;
+                        if (i >= args.length)
+                        {
+                            usage();
+                        }
+                        prefix = args[i];
+                        break;
+                    case ADDKEY:
+                        addKey = true;
+                        break;
+                    default:
+                        if (pdfFile == null)
+                        {
+                            pdfFile = args[i];
+                        }
+                        break;
                 }
             }
             if (pdfFile == null)
@@ -118,22 +119,13 @@ public class ExtractTTFFonts
                 {
                     prefix = pdfFile.substring(0, pdfFile.length() - 4);
                 }
-                PDDocument document = null;
-                try
+                try (PDDocument document = PDDocument.load(new File(pdfFile), password))
                 {
-                    document = PDDocument.load(new File(pdfFile), password);
                     for (PDPage page : document.getPages())
                     {
                         PDResources resources = page.getResources();
                         // extract all fonts which are part of the page resources
                         processResources(resources, prefix, addKey);
-                    }
-                }
-                finally
-                {
-                    if (document != null)
-                    {
-                        document.close();
                     }
                 }
             }
@@ -153,7 +145,7 @@ public class ExtractTTFFonts
             // write the font
             if (font instanceof PDTrueTypeFont)
             {
-                String name = null;
+                String name;
                 if (addKey)
                 {
                     name = getUniqueFileName(prefix + "_" + key, "ttf");
@@ -169,7 +161,7 @@ public class ExtractTTFFonts
                 PDCIDFont descendantFont = ((PDType0Font) font).getDescendantFont();
                 if (descendantFont instanceof PDCIDFontType2)
                 {
-                    String name = null;
+                    String name;
                     if (addKey)
                     {
                         name = getUniqueFileName(prefix + "_" + key, "ttf");
@@ -203,19 +195,11 @@ public class ExtractTTFFonts
             PDStream ff2Stream = fd.getFontFile2();
             if (ff2Stream != null)
             {
-                FileOutputStream fos = null;
-                try
+                System.out.println("Writing font: " + name);
+                try (OutputStream os = new FileOutputStream(new File(name + ".ttf"));
+                     InputStream is = ff2Stream.createInputStream())
                 {
-                    System.out.println("Writing font:" + name);
-                    fos = new FileOutputStream(new File(name + ".ttf"));
-                    IOUtils.copy(ff2Stream.createInputStream(), fos);
-                }
-                finally
-                {
-                    if (fos != null)
-                    {
-                        fos.close();
-                    }
+                    IOUtils.copy(is, os);
                 }
             }
         }
@@ -239,7 +223,7 @@ public class ExtractTTFFonts
      */
     private static void usage()
     {
-        System.err.println("Usage: java org.apache.pdfbox.ExtractTTFFonts [OPTIONS] <PDF file>\n"
+        System.err.println("Usage: java " + ExtractTTFFonts.class.getName() + " [OPTIONS] <PDF file>\n"
                 + "  -password  <password>        Password to decrypt document\n"
                 + "  -prefix  <font-prefix>       Font prefix(default to pdf name)\n"
                 + "  -addkey                      add the internal font key to the file name\n"

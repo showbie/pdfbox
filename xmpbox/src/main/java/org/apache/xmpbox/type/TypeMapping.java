@@ -78,8 +78,8 @@ public final class TypeMapping
     private void initialize()
     {
         // structured types
-        structuredMappings = new EnumMap<Types, PropertiesDescription>(Types.class);
-        structuredNamespaces = new HashMap<String, Types>();
+        structuredMappings = new EnumMap<>(Types.class);
+        structuredNamespaces = new HashMap<>();
         for (Types type : Types.values())
         {
             if (type.isStructured())
@@ -95,11 +95,11 @@ public final class TypeMapping
         }
 
         // define structured types
-        definedStructuredNamespaces = new HashMap<String, String>();
-        definedStructuredMappings = new HashMap<String, PropertiesDescription>();
+        definedStructuredNamespaces = new HashMap<>();
+        definedStructuredMappings = new HashMap<>();
 
         // schema
-        schemaMap = new HashMap<String, XMPSchemaFactory>();
+        schemaMap = new HashMap<>();
         addNameSpace(XMPBasicSchema.class);
         addNameSpace(DublinCoreSchema.class);
         addNameSpace(PDFAExtensionSchema.class);
@@ -134,32 +134,13 @@ public final class TypeMapping
             Class<? extends AbstractStructuredType> propertyTypeClass = type.getImplementingClass().asSubclass(
                     AbstractStructuredType.class);
             Constructor<? extends AbstractStructuredType> construct = propertyTypeClass
-                    .getConstructor(new Class<?>[] { XMPMetadata.class });
+                    .getDeclaredConstructor(XMPMetadata.class);
             AbstractStructuredType tmp = construct.newInstance(metadata);
             tmp.setPropertyName(propertyName);
             return tmp;
         }
-        catch (InvocationTargetException e)
-        {
-            throw new BadFieldValueException("Failed to instanciate structured type : " + type, e);
-        }
-        catch (IllegalArgumentException e)
-        {
-            throw new BadFieldValueException("Failed to instanciate structured type : " + type, e);
-        }
-        catch (InstantiationException e)
-        {
-            throw new BadFieldValueException("Failed to instanciate structured type : " + type, e);
-        }
-        catch (IllegalAccessException e)
-        {
-            throw new BadFieldValueException("Failed to instanciate structured type : " + type, e);
-        }
-        catch (SecurityException e)
-        {
-            throw new BadFieldValueException("Failed to instanciate structured type : " + type, e);
-        }
-        catch (NoSuchMethodException e)
+        catch (InvocationTargetException | IllegalArgumentException | InstantiationException |
+               IllegalAccessException | SecurityException | NoSuchMethodException e)
         {
             throw new BadFieldValueException("Failed to instanciate structured type : " + type, e);
         }
@@ -176,40 +157,18 @@ public final class TypeMapping
         // constructor parameters
         Object[] params = new Object[] { metadata, nsuri, prefix, name, value };
         // type
+        Class<? extends AbstractSimpleProperty> clz =
+                type.getImplementingClass().asSubclass(AbstractSimpleProperty.class);
         try
         {
-            Class<? extends AbstractSimpleProperty> clz = type.getImplementingClass().asSubclass(
-                    AbstractSimpleProperty.class);
-            Constructor<? extends AbstractSimpleProperty> cons = clz.getConstructor(SIMPLEPROPERTYCONSTPARAMS);
+            Constructor<? extends AbstractSimpleProperty> cons = clz.getDeclaredConstructor(SIMPLEPROPERTYCONSTPARAMS);
             return cons.newInstance(params);
         }
-        catch (NoSuchMethodError e)
+        catch (NoSuchMethodError | IllegalArgumentException | InstantiationException |
+               IllegalAccessException | InvocationTargetException | SecurityException |
+               NoSuchMethodException e)
         {
-            throw new IllegalArgumentException("Failed to instanciate property", e);
-        }
-        catch (IllegalArgumentException e)
-        {
-            throw new IllegalArgumentException("Failed to instanciate property", e);
-        }
-        catch (InstantiationException e)
-        {
-            throw new IllegalArgumentException("Failed to instanciate property", e);
-        }
-        catch (IllegalAccessException e)
-        {
-            throw new IllegalArgumentException("Failed to instanciate property", e);
-        }
-        catch (InvocationTargetException e)
-        {
-            throw new IllegalArgumentException("Failed to instanciate property", e);
-        }
-        catch (SecurityException e)
-        {
-            throw new IllegalArgumentException("Failed to instanciate property", e);
-        }
-        catch (NoSuchMethodException e)
-        {
-            throw new IllegalArgumentException("Failed to instanciate property", e);
+            throw new IllegalArgumentException("Failed to instanciate " + clz.getSimpleName() + " property with value " + value, e);
         }
     }
 

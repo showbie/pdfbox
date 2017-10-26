@@ -85,7 +85,7 @@ public class XMPMetadata
      */
     protected XMPMetadata(String xpacketBegin, String xpacketId, String xpacketBytes, String xpacketEncoding)
     {
-        this.schemas = new ArrayList<XMPSchema>();
+        this.schemas = new ArrayList<>();
         this.typeMapping = new TypeMapping(this);
 
         this.xpacketBegin = xpacketBegin;
@@ -175,11 +175,10 @@ public class XMPMetadata
      */
     public List<XMPSchema> getAllSchemas()
     {
-        ArrayList<XMPSchema> schem = new ArrayList<XMPSchema>();
-        Iterator<XMPSchema> it = schemas.iterator();
-        while (it.hasNext())
+        List<XMPSchema> schem = new ArrayList<>();
+        for (XMPSchema schema : schemas)
         {
-            schem.add(it.next());
+            schem.add(schema);
         }
         return schem;
     }
@@ -207,10 +206,10 @@ public class XMPMetadata
     /**
      * Get the XMPSchema for the specified namespace.
      * 
-     * Return the schema corresponding to this nsURI<br/>
+     * Return the schema corresponding to this nsURI<br>
      * BE CAREFUL: typically, Metadata should contain one schema for each type.
      * This method returns the first schema encountered
-     * corresponding to this NSURI.<br/>
+     * corresponding to this NSURI.<br>
      * Return null if unknown
      * 
      * @param nsURI The namespace URI corresponding to the schema wanted
@@ -234,10 +233,10 @@ public class XMPMetadata
     /** 
      * Get the XMPSchema for the specified Class.
      * 
-     * Return the schema corresponding to this Class<br/>
+     * Return the schema corresponding to this Class<br>
      * BE CAREFUL: typically, Metadata should contain one schema for each type.
      * This method returns the first schema encountered
-     * corresponding to this Class.<br/>
+     * corresponding to this Class.<br>
      * Return null if unknown
      * 
      * @param clz The Class corresponding to the schema wanted

@@ -18,6 +18,9 @@ package org.apache.pdfbox.examples.pdmodel;
 
 import java.awt.geom.Rectangle2D;
 import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.List;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -26,7 +29,6 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.interactive.action.PDAction;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionURI;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
 import org.apache.pdfbox.text.PDFTextStripperByArea;
 
 
@@ -35,7 +37,7 @@ import org.apache.pdfbox.text.PDFTextStripperByArea;
  *
  * @author Ben Litchfield
  */
-public class PrintURLs
+public final class PrintURLs
 {
     /**
      * Constructor.
@@ -46,15 +48,15 @@ public class PrintURLs
     }
 
     /**
-     * This will create a hello world PDF document.
-     * <br />
+     * This will output all URLs and the texts in the annotation rectangle of a document.
+     * <br>
      * see usage() for commandline
      *
      * @param args Command line arguments.
      *
-     * @throws Exception If there is an error extracting the URLs.
+     * @throws IOException If there is an error extracting the URLs.
      */
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args) throws IOException
     {
         PDDocument doc = null;
         try
@@ -76,10 +78,10 @@ public class PrintURLs
                     for( int j=0; j<annotations.size(); j++ )
                     {
                         PDAnnotation annot = annotations.get(j);
-                        if( annot instanceof PDAnnotationLink )
+
+                        if (getActionURI(annot) != null)
                         {
-                            PDAnnotationLink link = (PDAnnotationLink)annot;
-                            PDRectangle rect = link.getRectangle();
+                            PDRectangle rect = annot.getRectangle();
                             //need to reposition link rectangle to match text space
                             float x = rect.getLowerLeftX();
                             float y = rect.getUpperRightY();
@@ -89,11 +91,13 @@ public class PrintURLs
                             if( rotation == 0 )
                             {
                                 PDRectangle pageSize = page.getMediaBox();
+                                // area stripper uses java coordinates, not PDF coordinates
                                 y = pageSize.getHeight() - y;
                             }
-                            else if( rotation == 90 )
+                            else
                             {
-                                //do nothing
+                                // do nothing
+                                // please send us a sample file
                             }
 
                             Rectangle2D.Float awtRect = new Rectangle2D.Float( x,y,width,height );
@@ -106,16 +110,11 @@ public class PrintURLs
                     for( int j=0; j<annotations.size(); j++ )
                     {
                         PDAnnotation annot = annotations.get(j);
-                        if( annot instanceof PDAnnotationLink )
+                        PDActionURI uri = getActionURI(annot);
+                        if (uri != null)
                         {
-                            PDAnnotationLink link = (PDAnnotationLink)annot;
-                            PDAction action = link.getAction();
-                            String urlText = stripper.getTextForRegion( "" + j );
-                            if( action instanceof PDActionURI )
-                            {
-                                PDActionURI uri = (PDActionURI)action;
-                                System.out.println( "Page " + pageNum +":'" + urlText + "'=" + uri.getURI() );
-                            }
+                            String urlText = stripper.getTextForRegion("" + j);
+                            System.out.println("Page " + pageNum + ":'" + urlText.trim() + "'=" + uri.getURI());
                         }
                     }
                 }
@@ -128,6 +127,30 @@ public class PrintURLs
                 doc.close();
             }
         }
+    }
+
+    private static PDActionURI getActionURI(PDAnnotation annot)
+    {
+        // use reflection to catch all annotation types that have getAction()
+        // If you can't use reflection, then check for classes
+        // PDAnnotationLink and PDAnnotationWidget, and call getAction() and check for a 
+        // PDActionURI result type
+        try
+        {
+            Method actionMethod = annot.getClass().getDeclaredMethod("getAction");
+            if (actionMethod.getReturnType().equals(PDAction.class))
+            {
+                PDAction action = (PDAction) actionMethod.invoke(annot);
+                if (action instanceof PDActionURI)
+                {
+                    return (PDActionURI) action;
+                }
+            }
+        }
+        catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e)
+        {
+        }
+        return null;
     }
 
     /**

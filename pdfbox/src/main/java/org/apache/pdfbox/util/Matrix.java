@@ -22,6 +22,7 @@ import org.apache.pdfbox.cos.COSNumber;
 
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Point2D;
+import java.util.Arrays;
 
 /**
  * This class will be used for matrix manipulation.
@@ -37,10 +38,10 @@ public final class Matrix implements Cloneable
         0,0,1   //  tx ty 1     tx ty 1
     };
 
-    private float[] single;
+    private final float[] single;
 
     /**
-     * Constructor.
+     * Constructor. This produces an identity matrix.
      */
     public Matrix()
     {
@@ -49,7 +50,9 @@ public final class Matrix implements Cloneable
     }
 
     /**
-     * Creates a matrix from a 6-element COS array.
+     * Creates a matrix from a 6-element (a b c d e f) COS array.
+     *
+     * @param array
      */
     public Matrix(COSArray array)
     {
@@ -64,7 +67,21 @@ public final class Matrix implements Cloneable
     }
 
     /**
-     * Creates a matrix with the given 6 elements.
+     * Creates a transformation matrix with the given 6 elements. Transformation matrices are
+     * discussed in 8.3.3, "Common Transformations" and 8.3.4, "Transformation Matrices" of the PDF
+     * specification. For simple purposes (rotate, scale, translate) it is recommended to use the
+     * static methods below.
+     *
+     * @see Matrix#getRotateInstance(double, float, float)
+     * @see Matrix#getScaleInstance(float, float)
+     * @see Matrix#getTranslateInstance(float, float)
+     *
+     * @param a the X coordinate scaling element (m00) of the 3x3 matrix
+     * @param b the Y coordinate shearing element (m10) of the 3x3 matrix
+     * @param c the X coordinate shearing element (m01) of the 3x3 matrix
+     * @param d the Y coordinate scaling element (m11) of the 3x3 matrix
+     * @param e the X coordinate translation element (m02) of the 3x3 matrix
+     * @param f the Y coordinate translation element (m12) of the 3x3 matrix
      */
     public Matrix(float a, float b, float c, float d, float e, float f)
     {
@@ -80,6 +97,7 @@ public final class Matrix implements Cloneable
 
     /**
      * Creates a matrix with the same elements as the given AffineTransform.
+     * @param at
      */
     public Matrix(AffineTransform at)
     {
@@ -274,7 +292,7 @@ public final class Matrix implements Cloneable
      * This method multiplies this Matrix with the specified other Matrix, storing the product in the specified
      * result Matrix. By reusing Matrix instances like this, multiplication chains can be executed without having
      * to create many temporary Matrix objects.
-     * <p/>
+     * <p>
      * It is allowed to have (other == this) or (result == this) or indeed (other == result) but if this is done,
      * the backing float[] matrix values may be copied in order to ensure a correct product.
      *
@@ -389,7 +407,7 @@ public final class Matrix implements Cloneable
     /**
      * Transforms the given point by this matrix.
      *
-     * @param vector @2D vector
+     * @param vector 2D vector
      */
     public Vector transform(Vector vector)
     {
@@ -578,6 +596,8 @@ public final class Matrix implements Cloneable
 
     /**
      * Returns the x-scaling element of this matrix.
+     * 
+     * @see #getScalingFactorX() 
      */
     public float getScaleX()
     {
@@ -602,6 +622,8 @@ public final class Matrix implements Cloneable
 
     /**
      * Returns the y-scaling element of this matrix.
+     *
+     * @see #getScalingFactorY()
      */
     public float getScaleY()
     {
@@ -654,26 +676,49 @@ public final class Matrix implements Cloneable
     public COSArray toCOSArray()
     {
         COSArray array = new COSArray();
-        array.add(new COSFloat(0));
-        array.add(new COSFloat(1));
-        array.add(new COSFloat(3));
-        array.add(new COSFloat(4));
-        array.add(new COSFloat(6));
-        array.add(new COSFloat(7));
+        array.add(new COSFloat(single[0]));
+        array.add(new COSFloat(single[1]));
+        array.add(new COSFloat(single[3]));
+        array.add(new COSFloat(single[4]));
+        array.add(new COSFloat(single[6]));
+        array.add(new COSFloat(single[7]));
         return array;
     }
 
     @Override
     public String toString()
     {
-        StringBuffer sb = new StringBuffer( "" );
-        sb.append("[");
-        sb.append(single[0] + ",");
-        sb.append(single[1] + ",");
-        sb.append(single[3] + ",");
-        sb.append(single[4] + ",");
-        sb.append(single[6] + ",");
-        sb.append(single[7] + "]");
-        return sb.toString();
+        String sb = "" + "[" +
+                single[0] + "," +
+                single[1] + "," +
+                single[3] + "," +
+                single[4] + "," +
+                single[6] + "," +
+                single[7] + "]";
+        return sb;
+    }
+
+    @Override
+    public int hashCode()
+    {
+        return Arrays.hashCode(single);
+    }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj)
+        {
+            return true;
+        }
+        if (obj == null)
+        {
+            return false;
+        }
+        if (getClass() != obj.getClass())
+        {
+            return false;
+        }
+        return Arrays.equals(this.single, ((Matrix) obj).single);
     }
 }

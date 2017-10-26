@@ -84,7 +84,7 @@ public final class DomHelper
     public static List<Element> getElementChildren(Element description) throws XmpParsingException
     {
         NodeList nl = description.getChildNodes();
-        List<Element> ret = new ArrayList<Element>(nl.getLength());
+        List<Element> ret = new ArrayList<>(nl.getLength());
         for (int i = 0; i < nl.getLength(); i++)
         {
             if (nl.item(i) instanceof Element)
@@ -109,13 +109,7 @@ public final class DomHelper
     public static boolean isParseTypeResource(Element element)
     {
         Attr parseType = element.getAttributeNodeNS(XmpConstants.RDF_NAMESPACE, XmpConstants.PARSE_TYPE);
-        if (parseType != null && XmpConstants.RESOURCE_NAME.equals(parseType.getValue()))
-        {
-            // parseType resourc
-            return true;
-        }
-        // else
-        return false;
+        return parseType != null && XmpConstants.RESOURCE_NAME.equals(parseType.getValue());
     }
 
 }

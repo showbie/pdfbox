@@ -30,9 +30,11 @@ import org.apache.pdfbox.cos.COSNull;
 import org.apache.pdfbox.cos.COSObject;
 import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.io.RandomAccessRead;
+import org.apache.pdfbox.io.ScratchFile;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
 import org.apache.pdfbox.pdmodel.encryption.DecryptionMaterial;
+import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.apache.pdfbox.pdmodel.encryption.PDEncryption;
 import org.apache.pdfbox.pdmodel.encryption.PublicKeyDecryptionMaterial;
 import org.apache.pdfbox.pdmodel.encryption.StandardDecryptionMaterial;
@@ -45,34 +47,37 @@ public class PDFParser extends COSParser
     private InputStream keyStoreInputStream = null;
     private String keyAlias = null;
 
+    private PDEncryption encryption = null;    
     private AccessPermission accessPermission;
 
     /**
      * Constructor.
+     * Unrestricted main memory will be used for buffering PDF streams.
      * 
      * @param source source representing the pdf.
      * @throws IOException If something went wrong.
      */
     public PDFParser(RandomAccessRead source) throws IOException
     {
-        this(source, "", false);
+        this(source, "", ScratchFile.getMainMemoryOnlyInstance());
     }
 
     /**
      * Constructor.
      * 
      * @param source input representing the pdf.
-     * @param useScratchFiles use a file based buffer for temporary storage.
+     * @param scratchFile use a {@link ScratchFile} for temporary storage.
      * 
      * @throws IOException If something went wrong.
      */
-    public PDFParser(RandomAccessRead source, boolean useScratchFiles) throws IOException
+    public PDFParser(RandomAccessRead source, ScratchFile scratchFile) throws IOException
     {
-        this(source, "", useScratchFiles);
+        this(source, "", scratchFile);
     }
 
     /**
      * Constructor.
+     * Unrestricted main memory will be used for buffering PDF streams.
      * 
      * @param source input representing the pdf.
      * @param decryptionPassword password to be used for decryption.
@@ -80,7 +85,7 @@ public class PDFParser extends COSParser
      */
     public PDFParser(RandomAccessRead source, String decryptionPassword) throws IOException
     {
-        this(source, decryptionPassword, false);
+        this(source, decryptionPassword, ScratchFile.getMainMemoryOnlyInstance());
     }
 
     /**
@@ -88,18 +93,19 @@ public class PDFParser extends COSParser
      * 
      * @param source input representing the pdf.
      * @param decryptionPassword password to be used for decryption.
-     * @param useScratchFiles use a file based buffer for temporary storage.
+     * @param scratchFile use a {@link ScratchFile} for temporary storage.
      *
      * @throws IOException If something went wrong.
      */
-    public PDFParser(RandomAccessRead source, String decryptionPassword, boolean useScratchFiles)
+    public PDFParser(RandomAccessRead source, String decryptionPassword, ScratchFile scratchFile)
             throws IOException
     {
-        this(source, decryptionPassword, null, null, useScratchFiles);
+        this(source, decryptionPassword, null, null, scratchFile);
     }
 
     /**
      * Constructor.
+     * Unrestricted main memory will be used for buffering PDF streams.
      * 
      * @param source input representing the pdf.
      * @param decryptionPassword password to be used for decryption.
@@ -111,7 +117,7 @@ public class PDFParser extends COSParser
     public PDFParser(RandomAccessRead source, String decryptionPassword, InputStream keyStore,
             String alias) throws IOException
     {
-        this(source, decryptionPassword, keyStore, alias, false);
+        this(source, decryptionPassword, keyStore, alias, ScratchFile.getMainMemoryOnlyInstance());
     }
 
     /**
@@ -121,22 +127,23 @@ public class PDFParser extends COSParser
      * @param decryptionPassword password to be used for decryption.
      * @param keyStore key store to be used for decryption when using public key security 
      * @param alias alias to be used for decryption when using public key security
-     * @param useScratchFiles use a buffer for temporary storage.
+     * @param scratchFile buffer handler for temporary storage; it will be closed on
+     *        {@link COSDocument#close()}
      *
      * @throws IOException If something went wrong.
      */
     public PDFParser(RandomAccessRead source, String decryptionPassword, InputStream keyStore,
-            String alias, boolean useScratchFiles) throws IOException
+                     String alias, ScratchFile scratchFile) throws IOException
     {
-        pdfSource = source;
+        super(source);
         fileLen = source.length();
         password = decryptionPassword;
         keyStoreInputStream = keyStore;
         keyAlias = alias;
-        init(useScratchFiles);
+        init(scratchFile);
     }
-
-    private void init(boolean useScratchFiles) throws IOException
+    
+    private void init(ScratchFile scratchFile) throws IOException
     {
         String eofLookupRangeStr = System.getProperty(SYSPROP_EOFLOOKUPRANGE);
         if (eofLookupRangeStr != null)
@@ -151,9 +158,9 @@ public class PDFParser extends COSParser
                         + " does not contain an integer value, but: '" + eofLookupRangeStr + "'");
             }
         }
-        document = new COSDocument(useScratchFiles);
+        document = new COSDocument(scratchFile);
     }
-
+    
     /**
      * This will get the PD document that was parsed.  When you are done with
      * this document you must call close() on it to release resources.
@@ -164,7 +171,9 @@ public class PDFParser extends COSParser
      */
     public PDDocument getPDDocument() throws IOException
     {
-        return new PDDocument( getDocument(), pdfSource, accessPermission );
+        PDDocument doc = new PDDocument(getDocument(), source, accessPermission);
+        doc.setEncryptionDictionary(encryption);
+        return doc;
     }
 
     /**
@@ -172,43 +181,49 @@ public class PDFParser extends COSParser
      * to all the pdf's objects. It can handle linearized pdfs, which will have an xref at the end pointing to an xref
      * at the beginning of the file. Last the root object is parsed.
      * 
+     * @throws InvalidPasswordException If the password is incorrect.
      * @throws IOException If something went wrong.
      */
-    protected void initialParse() throws IOException
+    protected void initialParse() throws InvalidPasswordException, IOException
     {
-        COSDictionary trailer = null;
-        // parse startxref
-        long startXRefOffset = getStartxrefOffset();
-        if (startXRefOffset > -1)
-        {
-            trailer = parseXref(startXRefOffset);
-        }
-        else if (isLenient())
-        {
-            trailer = rebuildTrailer();
-        }
+        COSDictionary trailer = retrieveTrailer();
         // prepare decryption if necessary
         prepareDecryption();
     
-        parseTrailerValuesDynamically(trailer);
-    
-        COSObject catalogObj = document.getCatalog();
-        if (catalogObj != null && catalogObj.getObject() instanceof COSDictionary)
+        COSBase base = parseTrailerValuesDynamically(trailer);
+        if (!(base instanceof COSDictionary))
         {
-            parseDictObjects((COSDictionary) catalogObj.getObject(), (COSName[]) null);
-            document.setDecrypted();
+            throw new IOException("Expected root dictionary, but got this: " + base);
         }
+        COSDictionary root = (COSDictionary) base;
+        // in some pdfs the type value "Catalog" is missing in the root object
+        if (isLenient() && !root.containsKey(COSName.TYPE))
+        {
+            root.setItem(COSName.TYPE, COSName.CATALOG);
+        }
+        // parse all objects, starting at the root dictionary
+        parseDictObjects(root, (COSName[]) null);
+        // parse all objects of the info dictionary
+        COSBase infoBase = trailer.getDictionaryObject(COSName.INFO);
+        if (infoBase instanceof COSDictionary)
+        {
+            parseDictObjects((COSDictionary) infoBase, (COSName[]) null);
+        }
+        // check pages dictionaries
+        checkPages(root);
+        document.setDecrypted();
         initialParseDone = true;
     }
 
     /**
      * This will parse the stream and populate the COSDocument object.  This will close
-     * the stream when it is done parsing.
+     * the keystore stream when it is done parsing.
      *
+     * @throws InvalidPasswordException If the password is incorrect.
      * @throws IOException If there is an error reading from the stream or corrupt data
      * is found.
      */
-    public void parse() throws IOException
+    public void parse() throws InvalidPasswordException, IOException
     {
          // set to false if all is processed
          boolean exceptionOccurred = true; 
@@ -241,9 +256,10 @@ public class PDFParser extends COSParser
     /**
      * Prepare for decryption.
      * 
+     * @throws InvalidPasswordException If the password is incorrect.
      * @throws IOException if something went wrong
      */
-    private void prepareDecryption() throws IOException
+    private void prepareDecryption() throws InvalidPasswordException, IOException
     {
         COSBase trailerEncryptItem = document.getTrailer().getItem(COSName.ENCRYPT);
         if (trailerEncryptItem != null && !(trailerEncryptItem instanceof COSNull))
@@ -255,8 +271,7 @@ public class PDFParser extends COSParser
             }
             try
             {
-                PDEncryption encryption = new PDEncryption(document.getEncryptionDictionary());
-    
+                encryption = new PDEncryption(document.getEncryptionDictionary());
                 DecryptionMaterial decryptionMaterial;
                 if (keyStoreInputStream != null)
                 {

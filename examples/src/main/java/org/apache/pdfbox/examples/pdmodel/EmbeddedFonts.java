@@ -31,36 +31,46 @@ import org.apache.pdfbox.pdmodel.font.PDType0Font;
  * @author Keiji Suzuki
  * @author John Hewson
  */
-public class EmbeddedFonts
+public final class EmbeddedFonts
 {
+
+    private EmbeddedFonts()
+    {
+    }
+    
     public static void main(String[] args) throws IOException
     {
-        PDDocument document = new PDDocument();
-        PDPage page = new PDPage(PDRectangle.A4);
-        document.addPage(page);
-
-        String dir = "../pdfbox/src/main/resources/org/apache/pdfbox/resources/ttf/";
-        PDType0Font font = PDType0Font.load(document, new File(dir + "LiberationSans-Regular.ttf"));
-
-        PDPageContentStream stream = new PDPageContentStream(document, page);
-
-        stream.beginText();
-        stream.setFont(font, 12);
-        stream.setLeading(12 * 1.2);
-
-        stream.newLineAtOffset(50, 600);
-        stream.showText("PDFBox's Unicode with Embedded TrueType Font");
-        stream.newLine();
-
-        stream.showText("Supports full Unicode text ☺");
-        stream.newLine();
-
-        stream.showText("English русский язык Tiếng Việt");
-
-        stream.endText();
-        stream.close();
-
-        document.save("example.pdf");
-        document.close();
+        try (PDDocument document = new PDDocument())
+        {
+            PDPage page = new PDPage(PDRectangle.A4);
+            document.addPage(page);
+            
+            String dir = "../pdfbox/src/main/resources/org/apache/pdfbox/resources/ttf/";
+            PDType0Font font = PDType0Font.load(document, new File(dir + "LiberationSans-Regular.ttf"));
+            
+            try (PDPageContentStream stream = new PDPageContentStream(document, page))
+            {
+                stream.beginText();
+                stream.setFont(font, 12);
+                stream.setLeading(12 * 1.2);
+                
+                stream.newLineAtOffset(50, 600);
+                stream.showText("PDFBox's Unicode with Embedded TrueType Font");
+                stream.newLine();
+                
+                stream.showText("Supports full Unicode text ☺");
+                stream.newLine();
+                
+                stream.showText("English русский язык Tiếng Việt");
+                stream.newLine();
+                
+                // ligature
+                stream.showText("Ligatures: \uFB01lm \uFB02ood");
+                
+                stream.endText();
+            }
+            
+            document.save("example.pdf");
+        }
     }
 }

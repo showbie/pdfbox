@@ -109,7 +109,11 @@ public final class StandardSecurityHandler extends SecurityHandler
         {
             return DEFAULT_VERSION;
         }
-        else if(keyLength == 256)
+        else if (keyLength == 128 && policy.isPreferAES())
+        {
+            return 4;
+        }
+        else if (keyLength == 256)
         {
             return 5;
         }
@@ -137,6 +141,10 @@ public final class StandardSecurityHandler extends SecurityHandler
             // note about revision 5: "Shall not be used. This value was used by a deprecated Adobe extension."
             return 6;    
         }
+        if (version == 4)
+        {
+            return 4;
+        }
         if ( version == 2 || version == 3 || policy.getPermissions().hasAnyRevision3PermissionSet())
         {
             return 3;
@@ -153,12 +161,13 @@ public final class StandardSecurityHandler extends SecurityHandler
      * @param documentIDArray  document id
      * @param decryptionMaterial Information used to decrypt the document.
      *
+     * @throws InvalidPasswordException If the password is incorrect.
      * @throws IOException If there is an error accessing data.
      */
     @Override
     public void prepareForDecryption(PDEncryption encryption, COSArray documentIDArray,
                                      DecryptionMaterial decryptionMaterial)
-                                     throws IOException
+                                     throws InvalidPasswordException, IOException
     {
         if(!(decryptionMaterial instanceof StandardDecryptionMaterial))
         {
@@ -229,6 +238,7 @@ public final class StandardSecurityHandler extends SecurityHandler
                            dicLength, encryptMetadata) )
         {
             currentAccessPermission = new AccessPermission(dicPermissions);
+            currentAccessPermission.setReadOnly();
             setCurrentAccessPermission(currentAccessPermission);
             
             encryptionKey =
@@ -261,11 +271,8 @@ public final class StandardSecurityHandler extends SecurityHandler
             if (stdCryptFilterDictionary != null)
             {
                 COSName cryptFilterMethod = stdCryptFilterDictionary.getCryptFilterMethod();
-                if (cryptFilterMethod != null)
-                {
-                    setAES("AESV2".equalsIgnoreCase(cryptFilterMethod.getName())
-                            || "AESV3".equalsIgnoreCase(cryptFilterMethod.getName()));
-                }
+                setAES(COSName.AESV2.equals(cryptFilterMethod) || 
+                       COSName.AESV3.equals(cryptFilterMethod));
             }
         }
     }
@@ -288,26 +295,32 @@ public final class StandardSecurityHandler extends SecurityHandler
     }
 
     // Algorithm 13: validate permissions ("Perms" field). Relaxed to accomodate buggy encoders
+    // https://www.adobe.com/content/dam/Adobe/en/devnet/acrobat/pdfs/adobe_supplement_iso32000.pdf
     private void validatePerms(PDEncryption encryption, int dicPermissions, boolean encryptMetadata) throws IOException
     {
         try
         {
+            // "Decrypt the 16-byte Perms string using AES-256 in ECB mode with an 
+            // initialization vector of zero and the file encryption key as the key."
             Cipher cipher = Cipher.getInstance("AES/ECB/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(encryptionKey, "AES"));
             byte[] perms = cipher.doFinal(encryption.getPerms());
             
+            // "Verify that bytes 9-11 of the result are the characters ‘a’, ‘d’, ‘b’."
             if (perms[9] != 'a' || perms[10] != 'd' || perms[11] != 'b')
             {
                 LOG.warn("Verification of permissions failed (constant)");
             }
             
-            int permsP = perms[0] & 0xFF | perms[1] & 0xFF << 8 | perms[2] & 0xFF << 16 |
-                    perms[3] & 0xFF << 24;
+            // "Bytes 0-3 of the decrypted Perms entry, treated as a little-endian integer, 
+            // are the user permissions. They should match the value in the P key."
+            int permsP = perms[0] & 0xFF | (perms[1] & 0xFF) << 8 | (perms[2] & 0xFF) << 16 |
+                    (perms[3] & 0xFF) << 24;
             
             if (permsP != dicPermissions)
             {
-                LOG.warn("Verification of permissions failed (" + permsP +
-                        " != " + dicPermissions + ")");
+                LOG.warn("Verification of permissions failed (" + String.format("%08X",permsP) +
+                        " != " + String.format("%08X",dicPermissions) + ")");
             }
             
             if (encryptMetadata && perms[8] != 'T' || !encryptMetadata && perms[8] != 'F')
@@ -439,13 +452,7 @@ public final class StandardSecurityHandler extends SecurityHandler
             encryptionDictionary.setOwnerKey(o);
             encryptionDictionary.setOwnerEncryptionKey(oe);
 
-            PDCryptFilterDictionary cryptFilterDictionary = new PDCryptFilterDictionary();
-            cryptFilterDictionary.setCryptFilterMethod(COSName.AESV3);
-            cryptFilterDictionary.setLength(keyLength);
-            encryptionDictionary.setStdCryptFilterDictionary(cryptFilterDictionary);
-            encryptionDictionary.setStreamFilterName(COSName.STD_CF);
-            encryptionDictionary.setStringFilterName(COSName.STD_CF);
-            setAES(true);
+            prepareEncryptionDictAES(encryptionDictionary, COSName.AESV3);
 
             // Algorithm 10: compute "Perms" value
             byte[] perms = new byte[16];
@@ -521,6 +528,22 @@ public final class StandardSecurityHandler extends SecurityHandler
 
         encryptionDictionary.setOwnerKey(ownerBytes);
         encryptionDictionary.setUserKey(userBytes);
+        
+        if (revision == 4)
+        {
+            prepareEncryptionDictAES(encryptionDictionary, COSName.AESV2);
+        }
+    }
+
+    private void prepareEncryptionDictAES(PDEncryption encryptionDictionary, COSName aesVName)
+    {
+        PDCryptFilterDictionary cryptFilterDictionary = new PDCryptFilterDictionary();
+        cryptFilterDictionary.setCryptFilterMethod(aesVName);
+        cryptFilterDictionary.setLength(keyLength);
+        encryptionDictionary.setStdCryptFilterDictionary(cryptFilterDictionary);
+        encryptionDictionary.setStreamFilterName(COSName.STD_CF);
+        encryptionDictionary.setStringFilterName(COSName.STD_CF);
+        setAES(true);
     }
 
     /**
@@ -904,44 +927,57 @@ public final class StandardSecurityHandler extends SecurityHandler
                                   byte[] id, int encRevision, int length, boolean encryptMetadata)
                                   throws IOException
     {
-        if( encRevision == 2 )
+        switch (encRevision)
         {
-            byte[] passwordBytes = computeUserPassword( password, owner, permissions, id, encRevision,
-                                                        length, encryptMetadata );
+            case 2:
+            case 3:
+            case 4:
+                return isUserPassword234(password, user, owner, permissions, id, encRevision,
+                                         length, encryptMetadata);
+            case 5:
+            case 6:
+                return isUserPassword56(password, user, encRevision);
+            default:
+                throw new IOException("Unknown Encryption Revision " + encRevision);
+        }
+    }
+
+    private boolean isUserPassword234(byte[] password, byte[] user, byte[] owner, int permissions,
+            byte[] id, int encRevision, int length, boolean encryptMetadata)
+            throws IOException
+    {
+        byte[] passwordBytes = computeUserPassword(password, owner, permissions, id, encRevision,
+                                                   length, encryptMetadata);
+        if (encRevision == 2)
+        {
             return Arrays.equals(user, passwordBytes);
-        }
-        else if( encRevision == 3 || encRevision == 4 )
-        {
-            byte[] passwordBytes = computeUserPassword( password, owner, permissions, id, encRevision,
-                                                        length, encryptMetadata );
-            // compare first 16 bytes only
-            return Arrays.equals(Arrays.copyOf(user, 16), Arrays.copyOf(passwordBytes, 16));
-        }
-        else if (encRevision == 6 || encRevision == 5)
-        {
-            byte[] truncatedPassword = truncate127(password);
-            
-            byte[] uHash = new byte[32];
-            byte[] uValidationSalt = new byte[8];
-            System.arraycopy(user, 0, uHash, 0, 32);
-            System.arraycopy(user, 32, uValidationSalt, 0, 8);
-
-            byte[] hash;
-            if (encRevision == 5)
-            {
-                hash = computeSHA256(truncatedPassword, uValidationSalt, null);
-            }
-            else
-            {
-                hash = computeHash2A(truncatedPassword, uValidationSalt, null);
-            }
-
-            return Arrays.equals(hash, uHash);
         }
         else
         {
-            throw new IOException( "Unknown Encryption Revision " + encRevision );
+            // compare first 16 bytes only
+            return Arrays.equals(Arrays.copyOf(user, 16), Arrays.copyOf(passwordBytes, 16));
         }
+    }
+
+    private boolean isUserPassword56(byte[] password, byte[] user, int encRevision) throws IOException
+    {
+        byte[] truncatedPassword = truncate127(password);
+        byte[] uHash = new byte[32];
+        byte[] uValidationSalt = new byte[8];
+        System.arraycopy(user, 0, uHash, 0, 32);
+        System.arraycopy(user, 32, uValidationSalt, 0, 8);
+
+        byte[] hash;
+        if (encRevision == 5)
+        {
+            hash = computeSHA256(truncatedPassword, uValidationSalt, null);
+        }
+        else
+        {
+            hash = computeHash2A(truncatedPassword, uValidationSalt, null);
+        }
+
+        return Arrays.equals(hash, uHash);
     }
 
     /**

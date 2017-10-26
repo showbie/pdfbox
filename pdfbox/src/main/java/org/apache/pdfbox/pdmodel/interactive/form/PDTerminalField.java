@@ -66,21 +66,21 @@ public abstract class PDTerminalField extends PDField
      */
     public void setActions(PDFormFieldAdditionalActions actions)
     {
-        dictionary.setItem(COSName.AA, actions);
+        getCOSObject().setItem(COSName.AA, actions);
     }
     
     @Override
     public int getFieldFlags()
     {
         int retval = 0;
-        COSInteger ff = (COSInteger) dictionary.getDictionaryObject(COSName.FF);
+        COSInteger ff = (COSInteger) getCOSObject().getDictionaryObject(COSName.FF);
         if (ff != null)
         {
             retval = ff.intValue();
         }
-        else if (parent != null)
+        else if (getParent() != null)
         {
-            retval = parent.getFieldFlags();
+            retval = getParent().getFieldFlags();
         }
         return retval;
     }
@@ -88,10 +88,10 @@ public abstract class PDTerminalField extends PDField
     @Override
     public String getFieldType()
     {
-        String fieldType = dictionary.getNameAsString(COSName.FT);
-        if (fieldType == null && parent != null)
+        String fieldType = getCOSObject().getNameAsString(COSName.FT);
+        if (fieldType == null && getParent() != null)
         {
-            fieldType = parent.getFieldType();
+            fieldType = getParent().getFieldType();
         }
         return fieldType;
     }
@@ -145,7 +145,7 @@ public abstract class PDTerminalField extends PDField
     {
         FDFField fdfField = new FDFField();
         fdfField.setPartialFieldName(getPartialName());
-        fdfField.setValue(dictionary.getDictionaryObject(COSName.V));
+        fdfField.setValue(getCOSObject().getDictionaryObject(COSName.V));
 
         // fixme: the old code which was here assumed that Kids were PDField instances,
         //        which is never true. They're annotation widgets.
@@ -155,17 +155,21 @@ public abstract class PDTerminalField extends PDField
 
     /**
      * Returns the widget annotations associated with this field.
-     * 
-     * @return The list of widget annotations.
+     *
+     * @return The list of widget annotations. Be aware that this list is <i>not</i> backed by the
+     * actual widget collection of the field, so adding or deleting has no effect on the PDF
+     * document until you call {@link #setWidgets(java.util.List) setWidgets()} with the modified
+     * list.
      */
+    @Override
     public List<PDAnnotationWidget> getWidgets()
     {
-        List<PDAnnotationWidget> widgets = new ArrayList<PDAnnotationWidget>();
-        COSArray kids = (COSArray)dictionary.getDictionaryObject(COSName.KIDS);
+        List<PDAnnotationWidget> widgets = new ArrayList<>();
+        COSArray kids = (COSArray)getCOSObject().getDictionaryObject(COSName.KIDS);
         if (kids == null)
         {
             // the field itself is a widget
-            widgets.add(new PDAnnotationWidget(dictionary));
+            widgets.add(new PDAnnotationWidget(getCOSObject()));
         }
         else if (kids.size() > 0)
         {
@@ -190,7 +194,11 @@ public abstract class PDTerminalField extends PDField
     public void setWidgets(List<PDAnnotationWidget> children)
     {
         COSArray kidsArray = COSArrayList.converterToCOSArray(children);
-        dictionary.setItem(COSName.KIDS, kidsArray);
+        getCOSObject().setItem(COSName.KIDS, kidsArray);
+        for (PDAnnotationWidget widget : children)
+        {
+            widget.getCOSObject().setItem(COSName.PARENT, this);
+        }
     }
     
     /**
@@ -215,10 +223,7 @@ public abstract class PDTerminalField extends PDField
      */
     protected final void applyChange() throws IOException
     {
-        if (!acroForm.getNeedAppearances())
-        {
-            constructAppearances();
-        }
+        constructAppearances();
         // if we supported JavaScript we would raise a field changed event here
     }
     

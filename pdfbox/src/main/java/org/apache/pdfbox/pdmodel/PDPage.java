@@ -16,12 +16,16 @@
  */
 package org.apache.pdfbox.pdmodel;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
 import org.apache.pdfbox.contentstream.PDContentStream;
 import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
@@ -32,7 +36,6 @@ import org.apache.pdfbox.cos.COSNumber;
 import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.pdmodel.common.COSArrayList;
 import org.apache.pdfbox.pdmodel.common.COSObjectable;
-import org.apache.pdfbox.pdmodel.common.COSStreamArray;
 import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.common.PDStream;
@@ -56,6 +59,7 @@ public class PDPage implements COSObjectable, PDContentStream
     
     private final COSDictionary page;
     private PDResources pageResources;
+    private ResourceCache resourceCache;
     private PDRectangle mediaBox;
 
     /**
@@ -89,6 +93,17 @@ public class PDPage implements COSObjectable, PDContentStream
     }
 
     /**
+     * Creates a new instance of PDPage for reading.
+     *
+     * @param pageDictionary A page dictionary in a PDF document.
+     */
+    PDPage(COSDictionary pageDictionary, ResourceCache resourceCache)
+    {
+        page = pageDictionary;
+        this.resourceCache = resourceCache;
+    }
+
+    /**
      * Convert this standard java object to a COS object.
      * 
      * @return The cos object that matches this Java object.
@@ -99,19 +114,81 @@ public class PDPage implements COSObjectable, PDContentStream
         return page;
     }
 
+    /**
+     * Returns the content streams which make up this page.
+     * 
+     * @return content stream iterator
+     */
+    public Iterator<PDStream> getContentStreams()
+    {
+        List<PDStream> streams = new ArrayList<>();
+        COSBase base = page.getDictionaryObject(COSName.CONTENTS);
+        if (base instanceof COSStream)
+        {
+            streams.add(new PDStream((COSStream) base));
+        }
+        else if (base instanceof COSArray && ((COSArray) base).size() > 0)
+        {
+            COSArray array = (COSArray)base;
+            for (int i = 0; i < array.size(); i++)
+            {
+                COSStream stream = (COSStream) array.getObject(i);
+                streams.add(new PDStream(stream));
+            }
+        }
+        return streams.iterator();
+    }
+    
+    /**
+     * Returns the content stream(s) of this page as a single input stream.
+     *
+     * @return An InputStream, never null. Multiple content streams are concatenated and separated
+     * with a newline. An empty stream is returned if the page doesn't have any content stream.
+     * @throws IOException If the stream could not be read
+     */
     @Override
-    public COSStream getContentStream()
+    public InputStream getContents() throws IOException
     {
         COSBase base = page.getDictionaryObject(COSName.CONTENTS);
         if (base instanceof COSStream)
         {
-            return (COSStream)base;
+            return ((COSStream)base).createInputStream();
         }
         else if (base instanceof COSArray && ((COSArray) base).size() > 0)
         {
-            return new COSStreamArray((COSArray) base);
+            COSArray streams = (COSArray)base;
+            byte[] delimiter = new byte[] { '\n' };
+            List<InputStream> inputStreams = new ArrayList<>();
+            for (int i = 0; i < streams.size(); i++)
+            {
+                COSBase strm = streams.getObject(i);
+                if (strm instanceof COSStream)
+                {
+                    COSStream stream = (COSStream) strm;
+                    inputStreams.add(stream.createInputStream());
+                    inputStreams.add(new ByteArrayInputStream(delimiter));
+                }
+            }
+            return new SequenceInputStream(Collections.enumeration(inputStreams));
         }
-        return null;
+        return new ByteArrayInputStream(new byte[0]);
+    }
+
+    /**
+     * Returns true if this page has contents.
+     */
+    public boolean hasContents()
+    {
+        COSBase contents = page.getDictionaryObject(COSName.CONTENTS);
+        if (contents instanceof COSStream)
+        {
+            return ((COSStream) contents).size() > 0;
+        }
+        else if (contents instanceof COSArray)
+        {
+            return ((COSArray) contents).size() > 0;
+        }
+        return false;
     }
 
     /**
@@ -128,7 +205,7 @@ public class PDPage implements COSObjectable, PDContentStream
             // note: it's an error for resources to not be present
             if (resources != null)
             {
-                pageResources = new PDResources(resources);
+                pageResources = new PDResources(resources, resourceCache);
             }
         }
         return pageResources;
@@ -423,18 +500,6 @@ public class PDPage implements COSObjectable, PDContentStream
     }
 
     /**
-     * This will get the contents of the PDF Page, in the case that the contents of the page is an
-     * array then then the entire array of streams will be be wrapped and appear as a single stream.
-     * 
-     * @return The page content stream.
-     * @throws IOException If there is an error obtaining the stream.
-     */
-    public PDStream getStream() throws IOException
-    {
-        return PDStream.createFromCOS(page.getDictionaryObject(COSName.CONTENTS));
-    }
-
-    /**
      * This will set the contents of this page.
      * 
      * @param contents The new contents of the page.
@@ -445,10 +510,26 @@ public class PDPage implements COSObjectable, PDContentStream
     }
 
     /**
-     * This will get a list of PDThreadBead objects, which are article threads in the document.
-     * This will return an empty list of there are no thread beads.
-     * 
-     * @return A list of article threads on this page.
+     * This will set the contents of this page.
+     *
+     * @param contents Array of new contents of the page.
+     */
+    public void setContents(List<PDStream> contents)
+    {
+        COSArray array = new COSArray();
+        for (PDStream stream : contents)
+        {
+            array.add(stream);
+        }
+        page.setItem(COSName.CONTENTS, array);
+    }
+
+    /**
+     * This will get a list of PDThreadBead objects, which are article threads in the document. This
+     * will return an empty list if there are no thread beads.
+     *
+     * @return A list of article threads on this page, never null. The returned list is backed by
+     * the beads COSArray, so any adding or deleting in this list will change the document too.
      */
     public List<PDThreadBead> getThreadBeads()
     {
@@ -457,7 +538,7 @@ public class PDPage implements COSObjectable, PDContentStream
         {
             beads = new COSArray();
         }
-        List<PDThreadBead> pdObjects = new ArrayList<PDThreadBead>();
+        List<PDThreadBead> pdObjects = new ArrayList<>();
         for (int i = 0; i < beads.size(); i++)
         {
             COSDictionary beadDic = (COSDictionary) beads.getObject(i);
@@ -469,8 +550,7 @@ public class PDPage implements COSObjectable, PDContentStream
             }
             pdObjects.add(bead);
         }
-        return new COSArrayList<PDThreadBead>(pdObjects, beads);
-
+        return new COSArrayList<>(pdObjects, beads);
     }
 
     /**
@@ -567,9 +647,11 @@ public class PDPage implements COSObjectable, PDContentStream
     }
 
     /**
-     * This will return a list of the Annotations for this page.
+     * This will return a list of the annotations for this page.
+     *
+     * @return List of the PDAnnotation objects, never null. The returned list is backed by the
+     * annotations COSArray, so any adding or deleting in this list will change the document too.
      * 
-     * @return List of the PDAnnotation objects, never null.
      * @throws IOException If there is an error while creating the annotation list.
      */
     public List<PDAnnotation> getAnnotations() throws IOException
@@ -578,13 +660,11 @@ public class PDPage implements COSObjectable, PDContentStream
         COSArray annots = (COSArray) page.getDictionaryObject(COSName.ANNOTS);
         if (annots == null)
         {
-            annots = new COSArray();
-            page.setItem(COSName.ANNOTS, annots);
-            retval = new COSArrayList<PDAnnotation>(new ArrayList<PDAnnotation>(), annots);
+            return new COSArrayList<>(page, COSName.ANNOTS);
         }
         else
         {
-            List<PDAnnotation> actuals = new ArrayList<PDAnnotation>();
+            List<PDAnnotation> actuals = new ArrayList<>();
             for (int i = 0; i < annots.size(); i++)
             {
                 COSBase item = annots.getObject(i);
@@ -594,7 +674,7 @@ public class PDPage implements COSObjectable, PDContentStream
                 }
                 actuals.add(PDAnnotation.createAnnotation(item));
             }
-            retval = new COSArrayList<PDAnnotation>(actuals, annots);
+            retval = new COSArrayList<>(actuals, annots);
         }
         return retval;
     }
@@ -619,5 +699,13 @@ public class PDPage implements COSObjectable, PDContentStream
     public int hashCode()
     {
         return page.hashCode();
+    }
+
+    /**
+     * Returns the resource cache associated with this page, or null if there is none.
+     */
+    public ResourceCache getResourceCache()
+    {
+        return resourceCache;
     }
 }

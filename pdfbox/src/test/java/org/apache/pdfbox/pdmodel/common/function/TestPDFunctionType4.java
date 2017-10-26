@@ -18,12 +18,9 @@ package org.apache.pdfbox.pdmodel.common.function;
 
 import java.io.IOException;
 import java.io.OutputStream;
-
-import org.apache.pdfbox.cos.COSArray;
-import org.apache.pdfbox.cos.COSDictionary;
-import org.apache.pdfbox.cos.COSStream;
-
 import junit.framework.TestCase;
+import org.apache.pdfbox.cos.COSArray;
+import org.apache.pdfbox.cos.COSStream;
 
 /**
  * Tests the {@link PDFunctionType4} class.
@@ -34,22 +31,22 @@ public class TestPDFunctionType4 extends TestCase
     private PDFunctionType4 createFunction(String function, float[] domain, float[] range)
             throws IOException
     {
-        COSDictionary dict = new COSDictionary();
-        dict.setInt("FunctionType", 4);
+        COSStream stream = new COSStream();
+        stream.setInt("FunctionType", 4);
         COSArray domainArray = new COSArray();
         domainArray.setFloatArray(domain);
-        dict.setItem("Domain", domainArray);
+        stream.setItem("Domain", domainArray);
         COSArray rangeArray = new COSArray();
         rangeArray.setFloatArray(range);
-        dict.setItem("Range", rangeArray);
+        stream.setItem("Range", rangeArray);
+        
+        try (OutputStream out = stream.createOutputStream())
+        {
+            byte[] data = function.getBytes("US-ASCII");
+            out.write(data, 0, data.length);
+        }
 
-        COSStream functionStream = new COSStream(dict);
-        OutputStream out = functionStream.createUnfilteredStream();
-        byte[] data = function.getBytes("US-ASCII");
-        out.write(data, 0, data.length);
-        out.flush();
-
-        return new PDFunctionType4(functionStream);
+        return new PDFunctionType4(stream);
     }
 
     /**
@@ -78,6 +75,7 @@ public class TestPDFunctionType4 extends TestCase
         assertEquals(1f, output[0]);
 
         input = new float[] {0.8f, 1.2f}; //input argument outside Dimension
+        output = function.eval(input);
 
         assertEquals(1, output.length);
         assertEquals(1f, output[0]);

@@ -29,9 +29,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.SecureRandom;
-import java.security.Security;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
+import java.util.Collection;
 import java.util.Iterator;
 
 import javax.crypto.BadPaddingException;
@@ -60,7 +60,7 @@ import org.bouncycastle.asn1.cms.RecipientIdentifier;
 import org.bouncycastle.asn1.cms.RecipientInfo;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
-import org.bouncycastle.asn1.x509.TBSCertificateStructure;
+import org.bouncycastle.asn1.x509.TBSCertificate;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cms.CMSEnvelopedData;
 import org.bouncycastle.cms.CMSException;
@@ -68,7 +68,6 @@ import org.bouncycastle.cms.KeyTransRecipientId;
 import org.bouncycastle.cms.RecipientId;
 import org.bouncycastle.cms.RecipientInformation;
 import org.bouncycastle.cms.jcajce.JceKeyTransEnvelopedRecipient;
-import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 /**
  * This class implements the public key security handler described in the PDF specification.
@@ -140,6 +139,13 @@ public final class PublicKeySecurityHandler extends SecurityHandler
         {
             boolean foundRecipient = false;
 
+            X509Certificate certificate = material.getCertificate();
+            X509CertificateHolder materialCert = null;
+            if (certificate != null)
+            {
+                materialCert = new X509CertificateHolder(certificate.getEncoded());
+            }
+
             // the decrypted content of the enveloped data that match
             // the certificate in the decryption material provided
             byte[] envelopedData = null;
@@ -155,25 +161,19 @@ public final class PublicKeySecurityHandler extends SecurityHandler
                 COSString recipientFieldString = encryption.getRecipientStringAt(i);
                 byte[] recipientBytes = recipientFieldString.getBytes();
                 CMSEnvelopedData data = new CMSEnvelopedData(recipientBytes);
-                Iterator<?> recipCertificatesIt = data.getRecipientInfos().getRecipients().iterator();
+                Collection<RecipientInformation> recipCertificatesIt = data.getRecipientInfos()
+                        .getRecipients();
                 int j = 0;
-                while (recipCertificatesIt.hasNext())
+                for (RecipientInformation ri : recipCertificatesIt)
                 {
-                    RecipientInformation ri = (RecipientInformation) recipCertificatesIt.next();
                     // Impl: if a matching certificate was previously found it is an error,
                     // here we just don't care about it
-                    X509Certificate certificate = material.getCertificate();
-                    X509CertificateHolder materialCert = null;
-                    if (null != certificate)
-                    {
-                        materialCert = new X509CertificateHolder(certificate.getEncoded());
-                    }
                     RecipientId rid = ri.getRID();
-                    if (rid.match(materialCert) && !foundRecipient)
+                    if (!foundRecipient && rid.match(materialCert))
                     {
                         foundRecipient = true;
                         PrivateKey privateKey = (PrivateKey) material.getPrivateKey();
-                        envelopedData = ri.getContent(new JceKeyTransEnvelopedRecipient(privateKey).setProvider("BC"));
+                        envelopedData = ri.getContent(new JceKeyTransEnvelopedRecipient(privateKey));
                         break;
                     }
                     j++;
@@ -233,15 +233,7 @@ public final class PublicKeySecurityHandler extends SecurityHandler
             encryptionKey = new byte[this.keyLength / 8];
             System.arraycopy(mdResult, 0, encryptionKey, 0, this.keyLength / 8);
         }
-        catch (CMSException e)
-        {
-            throw new IOException(e);
-        }
-        catch (KeyStoreException e)
-        {
-            throw new IOException(e);
-        }
-        catch (CertificateEncodingException e)
+        catch (CMSException | KeyStoreException | CertificateEncodingException e)
         {
             throw new IOException(e);
         }
@@ -287,8 +279,6 @@ public final class PublicKeySecurityHandler extends SecurityHandler
         }
         try
         {
-            Security.addProvider(new BouncyCastleProvider());
-
             PDEncryption dictionary = doc.getEncryption();
             if (dictionary == null) 
             {
@@ -321,8 +311,10 @@ public final class PublicKeySecurityHandler extends SecurityHandler
 
             key.init(192, new SecureRandom());
             SecretKey sk = key.generateKey();
-            System.arraycopy(sk.getEncoded(), 0, seed, 0, 20); // create the 20 bytes seed
-            
+
+            // create the 20 bytes seed
+            System.arraycopy(sk.getEncoded(), 0, seed, 0, 20);
+
             byte[][] recipientsField = computeRecipientsField(seed);
             dictionary.setRecipients(recipientsField);
 
@@ -381,9 +373,10 @@ public final class PublicKeySecurityHandler extends SecurityHandler
             byte two = (byte)(permission >>> 8);
             byte three = (byte)(permission >>> 16);
             byte four = (byte)(permission >>> 24);
-            
-            System.arraycopy(seed, 0, pkcs7input, 0, 20); // put this seed in the pkcs7 input
-            
+
+            // put this seed in the pkcs7 input
+            System.arraycopy(seed, 0, pkcs7input, 0, 20);
+
             pkcs7input[20] = four;
             pkcs7input[21] = three;
             pkcs7input[22] = two;
@@ -393,9 +386,9 @@ public final class PublicKeySecurityHandler extends SecurityHandler
             
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             
-            DEROutputStream k = new DEROutputStream(baos);
+            DEROutputStream derOS = new DEROutputStream(baos);
             
-            k.writeObject(obj);
+            derOS.writeObject(obj);
             
             recipientsField[i] = baos.toByteArray();
             
@@ -413,14 +406,16 @@ public final class PublicKeySecurityHandler extends SecurityHandler
         Cipher cipher;
         try
         {
-            apg = AlgorithmParameterGenerator.getInstance(algorithm);
-            keygen = KeyGenerator.getInstance(algorithm);
-            cipher = Cipher.getInstance(algorithm);
+            apg = AlgorithmParameterGenerator.getInstance(algorithm,
+                    SecurityProvider.getProvider());
+            keygen = KeyGenerator.getInstance(algorithm, SecurityProvider.getProvider());
+            cipher = Cipher.getInstance(algorithm, SecurityProvider.getProvider());
         }
         catch (NoSuchAlgorithmException e)
         {
-            // should never happen, if this happens throw IOException instead
-            throw new RuntimeException("Could not find a suitable javax.crypto provider", e);
+            // happens when using the command line app .jar file
+            throw new IOException("Could not find a suitable javax.crypto provider for algorithm " + 
+                    algorithm + "; possible reason: using an unsigned .jar file", e);
         }
         catch (NoSuchPaddingException e)
         {
@@ -430,9 +425,11 @@ public final class PublicKeySecurityHandler extends SecurityHandler
 
         AlgorithmParameters parameters = apg.generateParameters();
 
-        ASN1InputStream input = new ASN1InputStream(parameters.getEncoded("ASN.1"));
-        ASN1Primitive object = input.readObject();
-        input.close();
+        ASN1Primitive object;
+        try (ASN1InputStream input = new ASN1InputStream(parameters.getEncoded("ASN.1")))
+        {
+            object = input.readObject();
+        }
 
         keygen.init(128);
         SecretKey secretkey = keygen.generateKey();
@@ -456,9 +453,11 @@ public final class PublicKeySecurityHandler extends SecurityHandler
         throws IOException, CertificateEncodingException, InvalidKeyException,
             BadPaddingException, IllegalBlockSizeException
     {
-        ASN1InputStream input = new ASN1InputStream(x509certificate.getTBSCertificate());
-        TBSCertificateStructure certificate = TBSCertificateStructure.getInstance(input.readObject());
-        input.close();
+        TBSCertificate certificate;
+        try (ASN1InputStream input = new ASN1InputStream(x509certificate.getTBSCertificate()))
+        {
+            certificate = TBSCertificate.getInstance(input.readObject());
+        }
 
         AlgorithmIdentifier algorithmId = certificate.getSubjectPublicKeyInfo().getAlgorithm();
 
@@ -469,14 +468,10 @@ public final class PublicKeySecurityHandler extends SecurityHandler
         Cipher cipher;
         try
         {
-            cipher = Cipher.getInstance(algorithmId.getAlgorithm().getId());
+            cipher = Cipher.getInstance(algorithmId.getAlgorithm().getId(),
+                    SecurityProvider.getProvider());
         }
-        catch (NoSuchAlgorithmException e)
-        {
-            // should never happen, if this happens throw IOException instead
-            throw new RuntimeException("Could not find a suitable javax.crypto provider", e);
-        }
-        catch (NoSuchPaddingException e)
+        catch (NoSuchAlgorithmException | NoSuchPaddingException e)
         {
             // should never happen, if this happens throw IOException instead
             throw new RuntimeException("Could not find a suitable javax.crypto provider", e);

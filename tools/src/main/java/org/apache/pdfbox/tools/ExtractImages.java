@@ -39,15 +39,16 @@ import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceGray;
 import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
 import org.apache.pdfbox.tools.imageio.ImageIOUtil;
 import org.apache.pdfbox.contentstream.PDFGraphicsStreamEngine;
+import org.apache.pdfbox.pdmodel.PDResources;
+import org.apache.pdfbox.pdmodel.graphics.form.PDTransparencyGroup;
+import org.apache.pdfbox.pdmodel.graphics.state.PDSoftMask;
 
 /**
  * Extracts the images from a PDF file.
  *
- * <p>usage: java org.apache.pdfbox.tools.ExtractImages &lt;pdffile&gt; &lt;password&gt; [imageprefix]
- *
  * @author Ben Litchfield
  */
-public class ExtractImages
+public final class ExtractImages
 {
     private static final String PASSWORD = "-password";
     private static final String PREFIX = "-prefix";
@@ -60,7 +61,7 @@ public class ExtractImages
     private boolean directJPEG;
     private String prefix;
 
-    private final Set<COSStream> seen = new HashSet<COSStream>();
+    private final Set<COSStream> seen = new HashSet<>();
     private int imageCounter = 1;
 
     private ExtractImages()
@@ -71,9 +72,9 @@ public class ExtractImages
      * Entry point for the application.
      *
      * @param args The command-line arguments.
-     * @throws Exception If there is an error decrypting the document.
+     * @throws IOException if there is an error reading the file or extracting the images.
      */
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args) throws IOException
     {
         // suppress the Dock icon on OS X
         System.setProperty("apple.awt.UIElement", "true");
@@ -82,7 +83,7 @@ public class ExtractImages
         extractor.run(args);
     }
 
-    private void run(String[] args) throws Exception
+    private void run(String[] args) throws IOException
     {
         if (args.length < 1 || args.length > 4)
         {
@@ -94,34 +95,33 @@ public class ExtractImages
             String password = "";
             for(int i = 0; i < args.length; i++)
             {
-                if (args[i].equals(PASSWORD))
+                switch (args[i])
                 {
-                    i++;
-                    if (i >= args.length)
-                    {
-                        usage();
-                    }
-                    password = args[i];
-                }
-                else if (args[i].equals(PREFIX))
-                {
-                    i++;
-                    if (i >= args.length)
-                    {
-                        usage();
-                    }
-                    prefix = args[i];
-                }
-                else if (args[i].equals(DIRECTJPEG))
-                {
-                    directJPEG = true;
-                }
-                else
-                {
-                    if (pdfFile == null)
-                    {
-                        pdfFile = args[i];
-                    }
+                    case PASSWORD:
+                        i++;
+                        if (i >= args.length)
+                        {
+                            usage();
+                        }
+                        password = args[i];
+                        break;
+                    case PREFIX:
+                        i++;
+                        if (i >= args.length)
+                        {
+                            usage();
+                        }
+                        prefix = args[i];
+                        break;
+                    case DIRECTJPEG:
+                        directJPEG = true;
+                        break;
+                    default:
+                        if (pdfFile == null)
+                        {
+                            pdfFile = args[i];
+                        }
+                        break;
                 }
             }
             if (pdfFile == null)
@@ -145,23 +145,24 @@ public class ExtractImages
      */
     private static void usage()
     {
-        System.err.println("Usage: java org.apache.pdfbox.tools.ExtractImages [OPTIONS] <PDF file>\n" +
-                "  -password  <password>        Password to decrypt document\n" +
-                "  -prefix  <image-prefix>      Image prefix(default to pdf name)\n" +
-                "  -directJPEG                  Forces the direct extraction of JPEG images "
-                + "regardless of colorspace\n" +
-                "  <PDF file>                   The PDF document to use\n");
+        String message = "Usage: java " + ExtractImages.class.getName() + " [options] <inputfile>\n"
+                + "\nOptions:\n"
+                + "  -password <password>   : Password to decrypt document\n"
+                + "  -prefix <image-prefix> : Image prefix (default to pdf name)\n"
+                + "  -directJPEG            : Forces the direct extraction of JPEG/JPX images "
+                + "                           regardless of colorspace or masking\n"
+                + "  <inputfile>            : The PDF document to use\n";
+        
+        System.err.println(message);
         System.exit(1);
     }
 
     private void extract(String pdfFile, String password) throws IOException
     {
-        PDDocument document = null;
-        try
+        try (PDDocument document = PDDocument.load(new File(pdfFile), password))
         {
-            document = PDDocument.load(new File(pdfFile), password);
             AccessPermission ap = document.getCurrentAccessPermission();
-            if (! ap.canExtractContent())
+            if (!ap.canExtractContent())
             {
                 throw new IOException("You do not have permission to extract images");
             }
@@ -171,13 +172,6 @@ public class ExtractImages
                 PDPage page = document.getPage(i);
                 ImageGraphicsEngine extractor = new ImageGraphicsEngine(page);
                 extractor.run();
-            }
-        }
-        finally
-        {
-            if (document != null)
-            {
-                document.close();
             }
         }
     }
@@ -191,7 +185,21 @@ public class ExtractImages
 
         public void run() throws IOException
         {
-            processPage(getPage());
+            PDPage page = getPage();
+            processPage(page);
+            PDResources res = page.getResources();
+            for (COSName name : res.getExtGStateNames())
+            {
+                PDSoftMask softMask = res.getExtGState(name).getSoftMask();
+                if (softMask != null)
+                {
+                    PDTransparencyGroup group = softMask.getGroup();
+                    if (group != null)
+                    {
+                        processSoftMask(group);
+                    }
+                }
+            }
         }
 
         @Override
@@ -200,12 +208,12 @@ public class ExtractImages
             if (pdImage instanceof PDImageXObject)
             {
                 PDImageXObject xobject = (PDImageXObject)pdImage;
-                if (seen.contains(xobject.getCOSStream()))
+                if (seen.contains(xobject.getCOSObject()))
                 {
                     // skip duplicate image
                     return;
                 }
-                seen.add(xobject.getCOSStream());
+                seen.add(xobject.getCOSObject());
             }
 
             // save image
@@ -291,35 +299,52 @@ public class ExtractImages
         }
     }
 
+    private boolean hasMasks(PDImage pdImage) throws IOException
+    {
+        if (pdImage instanceof PDImageXObject)
+        {
+            PDImageXObject ximg = (PDImageXObject) pdImage;
+            return ximg.getMask() != null || ximg.getSoftMask() != null;
+        }
+        return false;
+    }
+
     /**
-     * Writes the image to a file with the filename + an appropriate suffix, like "Image.jpg".
-     * The suffix is automatically set by the
-     * @param filename the filename
-     * @throws IOException When somethings wrong with the corresponding file.
+     * Writes the image to a file with the filename prefix + an appropriate suffix, like "Image.jpg".
+     * The suffix is automatically set depending on the image compression in the PDF.
+     * @param pdImage the image.
+     * @param prefix the filename prefix.
+     * @param directJPEG if true, force saving JPEG/JPX streams as they are in the PDF file. 
+     * @throws IOException When something is wrong with the corresponding file.
      */
     private void write2file(PDImage pdImage, String filename, boolean directJPEG) throws IOException
     {
         String suffix = pdImage.getSuffix();
-        if (suffix == null)
+        if (suffix == null || "jb2".equals(suffix))
         {
             suffix = "png";
         }
-
-        FileOutputStream out = null;
-        try
+        else if ("jpx".equals(suffix))
         {
-            out = new FileOutputStream(filename + "." + suffix);
+            // use jp2 suffix for file because jpx not known by windows
+            suffix = "jp2";
+        }
+
+        try (FileOutputStream out = new FileOutputStream(filename + "." + suffix))
+        {
             BufferedImage image = pdImage.getImage();
             if (image != null)
             {
                 if ("jpg".equals(suffix))
                 {
                     String colorSpaceName = pdImage.getColorSpace().getName();
-                    if (directJPEG || PDDeviceGray.INSTANCE.getName().equals(colorSpaceName) ||
-                                      PDDeviceRGB.INSTANCE.getName().equals(colorSpaceName))
+                    if (directJPEG || 
+                            !hasMasks(pdImage) && 
+                                     (PDDeviceGray.INSTANCE.getName().equals(colorSpaceName) ||
+                                      PDDeviceRGB.INSTANCE.getName().equals(colorSpaceName)))
                     {
-                        // RGB or Gray colorspace: get and write the unmodifiedJPEG stream
-                        InputStream data = pdImage.getStream().getPartiallyFilteredStream(JPEG);
+                        // RGB or Gray colorspace: get and write the unmodified JPEG stream
+                        InputStream data = pdImage.createInputStream(JPEG);
                         IOUtils.copy(data, out);
                         IOUtils.closeQuietly(data);
                     }
@@ -329,19 +354,32 @@ public class ExtractImages
                         ImageIOUtil.writeImage(image, suffix, out);
                     }
                 }
+                else if ("jp2".equals(suffix))
+                {
+                    String colorSpaceName = pdImage.getColorSpace().getName();
+                    if (directJPEG || 
+                            !hasMasks(pdImage) && 
+                                     (PDDeviceGray.INSTANCE.getName().equals(colorSpaceName) ||
+                                      PDDeviceRGB.INSTANCE.getName().equals(colorSpaceName)))
+                    {
+                        // RGB or Gray colorspace: get and write the unmodified JPEG2000 stream
+                        InputStream data = pdImage.createInputStream(
+                                Arrays.asList(COSName.JPX_DECODE.getName()));
+                        IOUtils.copy(data, out);
+                        IOUtils.closeQuietly(data);
+                    }
+                    else
+                    {                        
+                        // for CMYK and other "unusual" colorspaces, the image will be converted
+                        ImageIOUtil.writeImage(image, "jpeg2000", out);
+                    }
+                }
                 else 
                 {
                     ImageIOUtil.writeImage(image, suffix, out);
                 }
             }
             out.flush();
-        }
-        finally
-        {
-            if (out != null)
-            {
-                out.close();
-            }
         }
     }
 }

@@ -28,6 +28,7 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
@@ -39,10 +40,31 @@ import org.apache.pdfbox.pdmodel.font.PDType1Font;
  */
 public class TextToPDF
 {
-    private int fontSize = 10;
-    private PDFont font = PDType1Font.HELVETICA;
+    /**
+     * The scaling factor for font units to PDF units
+     */
+    private static final int FONTSCALE = 1000;
+    
+    /**
+     * The default font
+     */
+    private static final PDType1Font DEFAULT_FONT = PDType1Font.HELVETICA;
 
-    private static final Map<String, PDType1Font> STANDARD_14 = new HashMap<String, PDType1Font>();
+    /**
+     * The default font size
+     */
+    private static final int DEFAULT_FONT_SIZE = 10;
+    
+    /**
+     * The line height as a factor of the font size
+     */
+    private static final float LINE_HEIGHT_FACTOR = 1.05f;
+
+    private int fontSize = DEFAULT_FONT_SIZE;
+    private boolean landscape = false;
+    private PDFont font = DEFAULT_FONT;
+
+    private static final Map<String, PDType1Font> STANDARD_14 = new HashMap<>();
     static
     {
         STANDARD_14.put(PDType1Font.TIMES_ROMAN.getBaseFont(), PDType1Font.TIMES_ROMAN);
@@ -80,6 +102,7 @@ public class TextToPDF
     /**
      * Create a PDF document with some text.
      *
+     * @param doc The document.
      * @param text The stream of text data.
      *
      * @throws IOException If there is an error writing the data.
@@ -90,13 +113,18 @@ public class TextToPDF
         {
 
             final int margin = 40;
-            float height = font.getBoundingBox().getHeight() / 1000;
+            float height = font.getBoundingBox().getHeight() / FONTSCALE;
+            PDRectangle mediaBox = PDRectangle.LETTER;
+            if (landscape)
+            {
+                mediaBox = new PDRectangle(mediaBox.getHeight(), mediaBox.getWidth());
+            }
 
-            //calculate font height and increase by 5 percent.
-            height = height*fontSize*1.05f;
+            //calculate font height and increase by a factor.
+            height = height*fontSize*LINE_HEIGHT_FACTOR;
             BufferedReader data = new BufferedReader( text );
-            String nextLine = null;
-            PDPage page = new PDPage();
+            String nextLine;
+            PDPage page = new PDPage(mediaBox);
             PDPageContentStream contentStream = null;
             float y = -1;
             float maxStringLength = page.getMediaBox().getWidth() - 2*margin;
@@ -112,22 +140,63 @@ public class TextToPDF
                 // the text.
                 textIsEmpty = false;
 
-                String[] lineWords = nextLine.trim().split( " " );
+                String[] lineWords = nextLine.replaceAll("[\\n\\r]+$", "").split(" ");
                 int lineIndex = 0;
                 while( lineIndex < lineWords.length )
                 {
-                    StringBuffer nextLineToDraw = new StringBuffer();
+                    StringBuilder nextLineToDraw = new StringBuilder();
                     float lengthIfUsingNextWord = 0;
+                    boolean ff = false;
                     do
                     {
-                        nextLineToDraw.append( lineWords[lineIndex] );
-                        nextLineToDraw.append( " " );
-                        lineIndex++;
+                        String word1, word2 = "";
+                        int indexFF = lineWords[lineIndex].indexOf('\f');
+                        if (indexFF == -1)
+                        {
+                            word1 = lineWords[lineIndex];
+                        }
+                        else
+                        {
+                            ff = true;
+                            word1 = lineWords[lineIndex].substring(0, indexFF);
+                            if (indexFF < lineWords[lineIndex].length())
+                            {
+                                word2 = lineWords[lineIndex].substring(indexFF + 1);
+                            }
+                        }
+                        // word1 is the part before ff, word2 after
+                        // both can be empty
+                        // word1 can also be empty without ff, if a line has many spaces
+                        if (word1.length() > 0 || !ff)
+                        {
+                            nextLineToDraw.append(word1);
+                            nextLineToDraw.append(" ");
+                        }
+                        if (!ff || word2.length() == 0)
+                        {
+                            lineIndex++;
+                        }
+                        else
+                        {
+                            lineWords[lineIndex] = word2;
+                        }
+                        if (ff)
+                        {
+                            break;
+                        }
                         if( lineIndex < lineWords.length )
                         {
-                            String lineWithNextWord = nextLineToDraw.toString() + lineWords[lineIndex];
+                            // need cut off at \f in next word to avoid IllegalArgumentException
+                            String nextWord = lineWords[lineIndex];
+                            indexFF = nextWord.indexOf('\f');
+                            if (indexFF != -1)
+                            {
+                                nextWord = nextWord.substring(0, indexFF);
+                            }
+                            
+                            String lineWithNextWord = nextLineToDraw.toString() + " " + nextWord;
                             lengthIfUsingNextWord =
-                                (font.getStringWidth( lineWithNextWord )/1000) * fontSize;
+                                (font.getStringWidth( lineWithNextWord )/FONTSCALE) * fontSize;
                         }
                     }
                     while( lineIndex < lineWords.length &&
@@ -136,7 +205,7 @@ public class TextToPDF
                     {
                         // We have crossed the end-of-page boundary and need to extend the
                         // document by another page.
-                        page = new PDPage();
+                        page = new PDPage(mediaBox);
                         doc.addPage( page );
                         if( contentStream != null )
                         {
@@ -159,6 +228,18 @@ public class TextToPDF
                     contentStream.newLineAtOffset(0, -height);
                     y -= height;
                     contentStream.showText(nextLineToDraw.toString());
+                    if (ff)
+                    {
+                        page = new PDPage(mediaBox);
+                        doc.addPage(page);
+                        contentStream.endText();
+                        contentStream.close();
+                        contentStream = new PDPageContentStream(doc, page);
+                        contentStream.setFont(font, fontSize);
+                        contentStream.beginText();
+                        y = page.getMediaBox().getHeight() - margin + height;
+                        contentStream.newLineAtOffset(margin, y);
+                    }
                 }
 
 
@@ -190,7 +271,7 @@ public class TextToPDF
 
     /**
      * This will create a PDF document with some text in it.
-     * <br />
+     * <br>
      * see usage() for commandline
      *
      * @param args Command line arguments.
@@ -203,10 +284,10 @@ public class TextToPDF
         System.setProperty("apple.awt.UIElement", "true");
 
         TextToPDF app = new TextToPDF();
-        PDDocument doc = new PDDocument();
-        try
+                
+        try (PDDocument doc = new PDDocument())
         {
-            if( args.length < 2 )
+            if (args.length < 2)
             {
                 app.usage();
             }
@@ -214,34 +295,32 @@ public class TextToPDF
             {
                 for( int i=0; i<args.length-2; i++ )
                 {
-                    if( args[i].equals( "-standardFont" ))
+                    switch (args[i])
                     {
-                        i++;
-                        app.setFont( getStandardFont( args[i] ));
-                    }
-                    else if( args[i].equals( "-ttf" ))
-                    {
-                        i++;
-                        PDFont font = PDType0Font.load( doc, new File( args[i]) );
-                        app.setFont( font );
-                    }
-                    else if( args[i].equals( "-fontSize" ))
-                    {
-                        i++;
-                        app.setFontSize( Integer.parseInt( args[i] ) );
-                    }
-                    else
-                    {
-                        throw new IOException( "Unknown argument:" + args[i] );
+                        case "-standardFont":
+                            i++;
+                            app.setFont(getStandardFont(args[i]));
+                            break;
+                        case "-ttf":
+                            i++;
+                            PDFont font = PDType0Font.load(doc, new File(args[i]));
+                            app.setFont(font);
+                            break;
+                        case "-fontSize":
+                            i++;
+                            app.setFontSize(Integer.parseInt(args[i]));
+                            break;
+                        case "-landscape":
+                            app.setLandscape(true);
+                            break;
+                        default:
+                            throw new IOException("Unknown argument:" + args[i]);
                     }
                 }
+                
                 app.createPDFFromText( doc, new FileReader( args[args.length-1] ) );
                 doc.save( args[args.length-2] );
             }
-        }
-        finally
-        {
-            doc.close();
         }
     }
 
@@ -251,14 +330,22 @@ public class TextToPDF
     private void usage()
     {
         String[] std14 = getStandard14Names();
-        System.err.println( "usage: jar -jar pdfbox-app-x.y.z.jar TextToPDF [options] <output-file> <text-file>" );
-        System.err.println( "    -standardFont <name>    default:" + PDType1Font.HELVETICA.getBaseFont() );
+        
+        StringBuilder message = new StringBuilder();       
+        message.append("Usage: jar -jar pdfbox-app-x.y.z.jar TextToPDF [options] <outputfile> <textfile>\n");
+        message.append("\nOptions:\n");
+        message.append("  -standardFont <name> : ").append(DEFAULT_FONT.getBaseFont()).append(" (default)\n");
+
         for (String std14String : std14)
         {
-            System.err.println("                                    " + std14String);
+            message.append("                         ").append(std14String).append("\n");
         }
-        System.err.println( "    -ttf <ttf file>         The TTF font to use.");
-        System.err.println( "    -fontSize <fontSize>    default:10" );
+        message.append("  -ttf <ttf file>      : The TTF font to use.\n");
+        message.append("  -fontSize <fontSize> : default: ").append(DEFAULT_FONT_SIZE);
+        message.append("  -landscape           : sets orientation to landscape" );
+        
+        System.err.println(message.toString());
+        System.exit(1);
     }
 
 
@@ -312,5 +399,25 @@ public class TextToPDF
     public void setFontSize(int aFontSize)
     {
         this.fontSize = aFontSize;
+    }
+
+    /**
+     * Tells the paper orientation.
+     *
+     * @return
+     */
+    public boolean isLandscape()
+    {
+        return landscape;
+    }
+
+    /**
+     * Sets paper orientation.
+     *
+     * @param landscape
+     */
+    public void setLandscape(boolean landscape)
+    {
+        this.landscape = landscape;
     }
 }

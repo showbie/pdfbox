@@ -71,7 +71,6 @@ public class KerningSubtable
         }
         else if (version == 1)
         {
-            
             readSubtable1(data);
         }
         else
@@ -183,8 +182,8 @@ public class KerningSubtable
         int version = data.readUnsignedShort();
         if (version != 0)
         {
-            throw new UnsupportedOperationException("Unsupported kerning sub-table version: "
-                    + version);
+            LOG.info("Unsupported kerning sub-table version: " + version);
+            return;
         }
         int length = data.readUnsignedShort();
         if (length < 6)
@@ -228,14 +227,12 @@ public class KerningSubtable
 
     private void readSubtable0Format2(TTFDataStream data) throws IOException
     {
-        throw new UnsupportedOperationException(
-                "Kerning table version 0 format 2 not yet supported.");
+        LOG.info("Kerning subtable format 2 not yet supported.");
     }
 
     private void readSubtable1(TTFDataStream data) throws IOException
     {
-        throw new UnsupportedOperationException(
-                "Kerning table version 1 formats not yet supported.");
+        LOG.info("Kerning subtable format 1 not yet supported.");
     }
 
     private static boolean isBitsSet(int bits, int mask, int shift)
@@ -248,14 +245,14 @@ public class KerningSubtable
         return (bits & mask) >> shift;
     }
 
-    private abstract static class PairData
+    private interface PairData
     {
-        public abstract void read(TTFDataStream data) throws IOException;
+        void read(TTFDataStream data) throws IOException;
 
-        public abstract int getKerning(int l, int r);
+        int getKerning(int l, int r);
     }
 
-    private static class PairData0Format0 extends PairData implements Comparator<int[]>
+    private static class PairData0Format0 implements Comparator<int[]>, PairData
     {
         private int searchRange;
         private int[][] pairs;
@@ -283,16 +280,10 @@ public class KerningSubtable
         public int getKerning(int l, int r)
         {
             int[] key = new int[] { l, r, 0 };
-            int index;
-            index = Arrays.binarySearch(pairs, 0, searchRange, key, this);
+            int index = Arrays.binarySearch(pairs, key, this);
             if (index >= 0)
             {
                 return pairs[index][2];
-            }
-            index = Arrays.binarySearch(pairs, searchRange, pairs.length, key, this);
-            if (index >= 0)
-            {
-                return pairs[searchRange + index][2];
             }
             return 0;
         }

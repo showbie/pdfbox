@@ -29,6 +29,7 @@ import org.apache.pdfbox.pdmodel.documentinterchange.markedcontent.PDMarkedConte
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
 import org.apache.pdfbox.contentstream.operator.markedcontent.BeginMarkedContentSequence;
 import org.apache.pdfbox.contentstream.operator.markedcontent.BeginMarkedContentSequenceWithProperties;
+import org.apache.pdfbox.contentstream.operator.markedcontent.DrawObject;
 import org.apache.pdfbox.contentstream.operator.markedcontent.EndMarkedContentSequence;
 
 /**
@@ -36,12 +37,12 @@ import org.apache.pdfbox.contentstream.operator.markedcontent.EndMarkedContentSe
  *
  * @author Johannes Koch
  */
-public class PDFMarkedContentExtractor extends PDFTextStreamEngine
+public class PDFMarkedContentExtractor extends LegacyPDFStreamEngine
 {
-    private boolean suppressDuplicateOverlappingText = true;
-    private List<PDMarkedContent> markedContents = new ArrayList<PDMarkedContent>();
-    private Stack<PDMarkedContent> currentMarkedContents = new Stack<PDMarkedContent>();
-    private Map<String, List<TextPosition>> characterListMapping = new HashMap<String, List<TextPosition>>();
+    private final boolean suppressDuplicateOverlappingText = true;
+    private final List<PDMarkedContent> markedContents = new ArrayList<>();
+    private final Stack<PDMarkedContent> currentMarkedContents = new Stack<>();
+    private final Map<String, List<TextPosition>> characterListMapping = new HashMap<>();
 
     /**
      * Instantiate a new PDFTextStripper object.
@@ -61,6 +62,7 @@ public class PDFMarkedContentExtractor extends PDFTextStreamEngine
         addOperator(new BeginMarkedContentSequenceWithProperties());
         addOperator(new BeginMarkedContentSequence());
         addOperator(new EndMarkedContentSequence());
+        addOperator(new DrawObject());
         // todo: DP - Marked Content Point
         // todo: MP - Marked Content Point with Properties
     }
@@ -132,7 +134,7 @@ public class PDFMarkedContentExtractor extends PDFTextStreamEngine
             List<TextPosition> sameTextCharacters = this.characterListMapping.get( textCharacter );
             if( sameTextCharacters == null )
             {
-                sameTextCharacters = new ArrayList<TextPosition>();
+                sameTextCharacters = new ArrayList<>();
                 this.characterListMapping.put( textCharacter, sameTextCharacters );
             }
 
@@ -151,7 +153,7 @@ public class PDFMarkedContentExtractor extends PDFTextStreamEngine
             float tolerance = (text.getWidth()/textCharacter.length())/3.0f;
             for (TextPosition sameTextCharacter : sameTextCharacters)
             {
-                TextPosition character = (TextPosition) sameTextCharacter;
+                TextPosition character = sameTextCharacter;
                 String charCharacter = character.getUnicode();
                 float charX = character.getX();
                 float charY = character.getY();
@@ -176,7 +178,7 @@ public class PDFMarkedContentExtractor extends PDFTextStreamEngine
 
         if( showCharacter )
         {
-            List<TextPosition> textList = new ArrayList<TextPosition>();
+            List<TextPosition> textList = new ArrayList<>();
 
             /* In the wild, some PDF encoded documents put diacritics (accents on
              * top of characters) into a separate Tj element.  When displaying them
@@ -194,7 +196,7 @@ public class PDFMarkedContentExtractor extends PDFTextStreamEngine
                  * Note that we are making an assumption that we need to only look back
                  * one TextPosition to find what we are overlapping.  
                  * This may not always be true. */
-                TextPosition previousTextPosition = (TextPosition)textList.get(textList.size()-1);
+                TextPosition previousTextPosition = textList.get(textList.size()-1);
                 if(text.isDiacritic() && previousTextPosition.contains(text))
                 {
                     previousTextPosition.mergeDiacritic(text);

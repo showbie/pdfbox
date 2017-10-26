@@ -20,6 +20,9 @@ package org.apache.fontbox.util.autodetect;
 import java.io.File;
 import java.net.URI;
 import java.util.List;
+import java.util.Locale;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 /**
  * Helps to autodetect/locate available operating system fonts. This class is based on a class provided by Apache FOP.
@@ -27,6 +30,7 @@ import java.util.List;
  */
 public class FontFileFinder
 {
+    private static final Log LOG = LogFactory.getLog(FontFileFinder.class);
 
     private FontDirFinder fontDirFinder = null;
 
@@ -69,7 +73,7 @@ public class FontFileFinder
             fontDirFinder = determineDirFinder();
         }
         List<File> fontDirs = fontDirFinder.find();
-        List<URI> results = new java.util.ArrayList<URI>();
+        List<URI> results = new java.util.ArrayList<>();
         for (File dir : fontDirs)
         {
             walk(dir, results);
@@ -85,7 +89,7 @@ public class FontFileFinder
      */
     public List<URI> find(String dir)
     {
-        List<URI> results = new java.util.ArrayList<URI>();
+        List<URI> results = new java.util.ArrayList<>();
         File directory = new File(dir);
         if (directory.isDirectory())
         {
@@ -108,10 +112,8 @@ public class FontFileFinder
             File[] filelist = directory.listFiles();
             if (filelist != null)
             {
-                int numOfFiles = filelist.length;
-                for (int i=0;i<numOfFiles;i++)
+                for (File file : filelist)
                 {
-                    File file = filelist[i];
                     if (file.isDirectory())
                     {
                         // skip hidden directories
@@ -123,8 +125,16 @@ public class FontFileFinder
                     }
                     else
                     {
+                        if (LOG.isDebugEnabled())
+                        {
+                            LOG.debug("checkFontfile check " + file);
+                        }
                         if (checkFontfile(file))
                         {
+                            if (LOG.isDebugEnabled())
+                            {
+                                LOG.debug("checkFontfile found " + file);
+                            }
                             results.add(file.toURI());
                         }
                     }
@@ -141,7 +151,9 @@ public class FontFileFinder
      */
     private boolean checkFontfile(File file)
     {
-        String name = file.getName().toLowerCase();
-        return name.endsWith(".ttf") || name.endsWith(".otf") || name.endsWith(".pfb") || name.endsWith(".ttc");
+        String name = file.getName().toLowerCase(Locale.US);
+        return (name.endsWith(".ttf") || name.endsWith(".otf") || name.endsWith(".pfb") || name.endsWith(".ttc")) 
+                // PDFBOX-3377 exclude weird files in AIX
+                && !name.startsWith("fonts.");
     }
 }

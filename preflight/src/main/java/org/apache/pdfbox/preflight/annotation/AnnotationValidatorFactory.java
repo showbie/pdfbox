@@ -38,7 +38,7 @@ public abstract class AnnotationValidatorFactory
 {
     protected ActionManagerFactory actionFact = null;
 
-    protected Map<String, Class<? extends AnnotationValidator>> validatorClasses = new HashMap<String, Class<? extends AnnotationValidator>>();
+    protected Map<String, Class<? extends AnnotationValidator>> validatorClasses = new HashMap<>();
 
     public AnnotationValidatorFactory()
     {
@@ -85,8 +85,8 @@ public abstract class AnnotationValidatorFactory
         {
             try
             {
-                Constructor<? extends AnnotationValidator> constructor = clazz.getConstructor(PreflightContext.class,
-                        COSDictionary.class);
+                Constructor<? extends AnnotationValidator> constructor =
+                        clazz.getDeclaredConstructor(PreflightContext.class, COSDictionary.class);
                 result = constructor.newInstance(ctx, annotDic);
                 result.setFactory(this);
             }

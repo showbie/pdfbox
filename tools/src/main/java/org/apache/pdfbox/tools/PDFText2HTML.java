@@ -39,7 +39,6 @@ public class PDFText2HTML extends PDFTextStripper
 {
     private static final int INITIAL_PDF_TO_HTML_BYTES = 8192;
 
-    private boolean onFirstPage = true;
     private final FontState fontState = new FontState();
 
     /**
@@ -64,34 +63,26 @@ public class PDFText2HTML extends PDFTextStripper
      *
      * @throws IOException
      *             If there is a problem writing out the header to the document.
+     * @deprecated deprecated, use {@link #startDocument(PDDocument)}
      */
     protected void writeHeader() throws IOException
+    {
+    }
+
+    @Override
+    protected void startDocument(PDDocument document) throws IOException
     {
         StringBuilder buf = new StringBuilder(INITIAL_PDF_TO_HTML_BYTES);
         buf.append("<!DOCTYPE html PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\"" + "\n"
                 + "\"http://www.w3.org/TR/html4/loose.dtd\">\n");
         buf.append("<html><head>");
         buf.append("<title>").append(escape(getTitle())).append("</title>\n");
-        buf.append("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=\"UTF-16\">\n");
+        buf.append("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=\"UTF-8\">\n");
         buf.append("</head>\n");
         buf.append("<body>\n");
         super.writeString(buf.toString());
     }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    protected void writePage() throws IOException
-    {
-        if (onFirstPage)
-        {
-            writeHeader();
-            onFirstPage = false;
-        }
-        super.writePage();
-    }
-
+    
     /**
      * {@inheritDoc}
      */
@@ -122,11 +113,8 @@ public class PDFText2HTML extends PDFTextStripper
             StringBuilder titleText = new StringBuilder();
             while (textIter.hasNext())
             {
-                Iterator<TextPosition> textByArticle = textIter.next().iterator();
-                while (textByArticle.hasNext())
+                for (TextPosition position : textIter.next())
                 {
-                    TextPosition position = textByArticle.next();
-
                     float currentFontSize = position.getFontSize();
                     //If we're past 64 chars we will assume that we're past the title
                     //64 is arbitrary
@@ -278,8 +266,8 @@ public class PDFText2HTML extends PDFTextStripper
      */
     private static class FontState
     {
-        private final List<String> stateList = new ArrayList<String>();
-        private final Set<String> stateSet = new HashSet<String>();
+        private final List<String> stateList = new ArrayList<>();
+        private final Set<String> stateSet = new HashSet<>();
 
         /**
          * Pushes new {@link TextPosition TextPositions} into the font state. The state is only

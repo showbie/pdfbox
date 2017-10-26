@@ -17,9 +17,11 @@
 package org.apache.pdfbox.examples.pdmodel;
 
 import java.io.File;
+import java.io.IOException;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageFitWidthDestination;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
@@ -28,11 +30,9 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlin
  * This is an example on how to add bookmarks to a PDF document.  It simply
  * adds 1 bookmark for every page.
  *
- * Usage: java org.apache.pdfbox.examples.pdmodel.CreateBookmarks &lt;input-pdf&gt; &lt;output-pdf&gt;
- *
  * @author Ben Litchfield
  */
-public class CreateBookmarks
+public final class CreateBookmarks
 {
     private CreateBookmarks()
     {
@@ -44,9 +44,9 @@ public class CreateBookmarks
      *
      * @param args The command line arguments.
      *
-     * @throws Exception If there is an error parsing the document.
+     * @throws IOException If there is an error parsing the document.
      */
-    public static void main( String[] args ) throws Exception
+    public static void main( String[] args ) throws IOException
     {
         if( args.length != 2 )
         {
@@ -54,11 +54,9 @@ public class CreateBookmarks
         }
         else
         {
-            PDDocument document = null;
-            try
+            try (PDDocument document = PDDocument.load(new File(args[0])))
             {
-                document = PDDocument.load( new File(args[0]) );
-                if( document.isEncrypted() )
+                if (document.isEncrypted())
                 {
                     System.err.println( "Error: Cannot add bookmarks to encrypted document." );
                     System.exit( 1 );
@@ -72,7 +70,10 @@ public class CreateBookmarks
                 for( PDPage page : document.getPages() )
                 {
                     pageNum++;
-                    PDPageFitWidthDestination dest = new PDPageFitWidthDestination();
+                    PDPageDestination dest = new PDPageFitWidthDestination();
+                    // If you want to have several bookmarks pointing to different areas 
+                    // on the same page, have a look at the other classes derived from PDPageDestination.
+
                     dest.setPage( page );
                     PDOutlineItem bookmark = new PDOutlineItem();
                     bookmark.setDestination( dest );
@@ -84,13 +85,6 @@ public class CreateBookmarks
 
                 document.save( args[1] );
             }
-            finally
-            {
-                if( document != null )
-                {
-                    document.close();
-                }
-            }
         }
     }
 
@@ -99,6 +93,6 @@ public class CreateBookmarks
      */
     private static void usage()
     {
-        System.err.println( "Usage: java org.apache.pdfbox.examples.pdmodel.CreateBookmarks <input-pdf> <output-pdf>" );
+        System.err.println( "Usage: java " + CreateBookmarks.class.getName() + " <input-pdf> <output-pdf>" );
     }
 }

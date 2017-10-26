@@ -37,7 +37,6 @@ import static org.apache.pdfbox.preflight.PreflightConstants.FONT_DICTIONARY_KEY
 import static org.apache.pdfbox.preflight.PreflightConstants.FONT_DICTIONARY_KEY_ITALICANGLE;
 import static org.apache.pdfbox.preflight.PreflightConstants.FONT_DICTIONARY_KEY_STEMV;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -45,10 +44,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.font.PDFont;
@@ -77,7 +76,7 @@ public abstract class FontDescriptorHelper<T extends FontContainer>
     
     static 
     {
-        MANDATORYFIELDS = new HashSet<String>();
+        MANDATORYFIELDS = new HashSet<>();
         MANDATORYFIELDS.add(FONT_DICTIONARY_KEY_FLAGS);
         MANDATORYFIELDS.add(FONT_DICTIONARY_KEY_ITALICANGLE);
         MANDATORYFIELDS.add(FONT_DICTIONARY_KEY_CAPHEIGHT);
@@ -242,7 +241,7 @@ public abstract class FontDescriptorHelper<T extends FontContainer>
                     XMPMetadata xmpMeta = xmpBuilder.parse(mdAsBytes);
 
                     FontMetaDataValidation fontMDval = new FontMetaDataValidation();
-                    List<ValidationError> ve = new ArrayList<ValidationError>();
+                    List<ValidationError> ve = new ArrayList<>();
                     fontMDval.analyseFontName(xmpMeta, fontDescriptor, ve);
                     fontMDval.analyseRights(xmpMeta, fontDescriptor, ve);
                     this.fContainer.push(ve);
@@ -275,27 +274,16 @@ public abstract class FontDescriptorHelper<T extends FontContainer>
 
     protected final byte[] getMetaDataStreamAsBytes(PDMetadata metadata)
     {
-        byte[] result = null;
-        ByteArrayOutputStream bos = null;
-        InputStream metaDataContent = null;
-        try
+        try (InputStream metaDataContent = metadata.createInputStream())
         {
-            bos = new ByteArrayOutputStream();
-            metaDataContent = metadata.createInputStream();
-            IOUtils.copyLarge(metaDataContent, bos);
-            result = bos.toByteArray();
+            return IOUtils.toByteArray(metaDataContent);
         }
         catch (IOException e)
         {
             this.fContainer.push(new ValidationError(ERROR_METADATA_FORMAT_STREAM,
                     this.font.getName() + ": Unable to read font metadata due to : " + e.getMessage(), e));
+            return null;
         }
-        finally
-        {
-            IOUtils.closeQuietly(metaDataContent);
-            IOUtils.closeQuietly(bos);
-        }
-        return result;
     }
 
     public static boolean isSubSet(String fontName)

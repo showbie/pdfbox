@@ -29,6 +29,7 @@ import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType0Font;
 import org.apache.pdfbox.pdmodel.graphics.color.PDOutputIntent;
 import org.apache.xmpbox.XMPMetadata;
+import org.apache.xmpbox.schema.DublinCoreSchema;
 import org.apache.xmpbox.schema.PDFAIdentificationSchema;
 import org.apache.xmpbox.type.BadFieldValueException;
 import org.apache.xmpbox.xml.XmpSerializer;
@@ -36,8 +37,12 @@ import org.apache.xmpbox.xml.XmpSerializer;
 /**
  * Creates a simple PDF/A document.
  */
-public class CreatePDFA
+public final class CreatePDFA
 {
+    private CreatePDFA()
+    {
+    }
+    
     public static void main(String[] args) throws IOException, TransformerException
     {
         if (args.length != 3)
@@ -51,8 +56,7 @@ public class CreatePDFA
         String message = args[1];
         String fontfile = args[2];
 
-        PDDocument doc = new PDDocument();
-        try
+        try (PDDocument doc = new PDDocument())
         {
             PDPage page = new PDPage();
             doc.addPage(page);
@@ -60,24 +64,43 @@ public class CreatePDFA
             // load the font as this needs to be embedded
             PDFont font = PDType0Font.load(doc, new File(fontfile));
 
+            // A PDF/A file needs to have the font embedded if the font is used for text rendering
+            // in rendering modes other than text rendering mode 3.
+            //
+            // This requirement includes the PDF standard fonts, so don't use their static PDFType1Font classes such as
+            // PDFType1Font.HELVETICA.
+            //
+            // As there are many different font licenses it is up to the developer to check if the license terms for the
+            // font loaded allows embedding in the PDF.
+            // 
+            if (!font.isEmbedded())
+            {
+            	throw new IllegalStateException("PDF/A compliance requires that all fonts used for"
+            			+ " text rendering in rendering modes other than rendering mode 3 are embedded.");
+            }
+            
             // create a page with the message
-            PDPageContentStream contents = new PDPageContentStream(doc, page);
-            contents.beginText();
-            contents.setFont(font, 12);
-            contents.newLineAtOffset(100, 700);
-            contents.showText(message);
-            contents.endText();
-            contents.saveGraphicsState();
-            contents.close();
+            try (PDPageContentStream contents = new PDPageContentStream(doc, page))
+            {
+                contents.beginText();
+                contents.setFont(font, 12);
+                contents.newLineAtOffset(100, 700);
+                contents.showText(message);
+                contents.endText();
+                contents.saveGraphicsState();
+            }
 
             // add XMP metadata
             XMPMetadata xmp = XMPMetadata.createXMPMetadata();
+            
             try
             {
+                DublinCoreSchema dc = xmp.createAndAddDublinCoreSchema();
+                dc.setTitle(file);
+                
                 PDFAIdentificationSchema id = xmp.createAndAddPFAIdentificationSchema();
                 id.setPart(1);
                 id.setConformance("B");
-                id.setAboutAsSimple("PDFBox PDF/A sample");
                 
                 XmpSerializer serializer = new XmpSerializer();
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -95,7 +118,7 @@ public class CreatePDFA
 
             // sRGB output intent
             InputStream colorProfile = CreatePDFA.class.getResourceAsStream(
-                    "/org/apache/pdfbox/resources/pdfa/sRGB Color Space Profile.icm");
+                    "/org/apache/pdfbox/resources/pdfa/sRGB.icc");
             PDOutputIntent intent = new PDOutputIntent(doc, colorProfile);
             intent.setInfo("sRGB IEC61966-2.1");
             intent.setOutputCondition("sRGB IEC61966-2.1");
@@ -104,10 +127,6 @@ public class CreatePDFA
             doc.getDocumentCatalog().addOutputIntent(intent);
 
             doc.save(file);
-        }
-        finally
-        {
-            doc.close();
         }
     }
 }

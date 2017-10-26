@@ -22,9 +22,9 @@ import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.common.PDMetadata;
 
 import java.io.File;
+import java.io.IOException;
 import java.text.DateFormat;
 import java.util.Calendar;
-import java.util.Iterator;
 import java.util.List;
 
 import org.apache.xmpbox.XMPMetadata;
@@ -37,10 +37,8 @@ import org.apache.xmpbox.xml.XmpParsingException;
 /**
  * This is an example on how to extract metadata from a PDF document.
  * 
- * Usage: java org.apache.pdfbox.examples.pdmodel.ExtractDocument &lt;input-pdf&gt;
- *
  */
-public class ExtractMetadata
+public final class ExtractMetadata
 {
     private ExtractMetadata()
     {
@@ -52,9 +50,10 @@ public class ExtractMetadata
      *
      * @param args The command line arguments.
      *
-     * @throws Exception If there is an error parsing the document.
+     * @throws IOException If there is an error parsing the document.
+     * @throws XmpParsingException
      */
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args) throws IOException, XmpParsingException
     {
         if (args.length != 1)
         {
@@ -63,10 +62,8 @@ public class ExtractMetadata
         }
         else
         {
-            PDDocument document = null;
-            try
+            try (PDDocument document = PDDocument.load(new File(args[0])))
             {
-                document = PDDocument.load(new File(args[0]));
                 PDDocumentCatalog catalog = document.getDocumentCatalog();
                 PDMetadata meta = catalog.getMetadata();
                 if (meta != null)
@@ -118,14 +115,6 @@ public class ExtractMetadata
                         showDocumentInformation(information);
                     }
                 }
-
-            }
-            finally
-            {
-                if (document != null)
-                {
-                    document.close();
-                }
             }
         }
     }
@@ -146,10 +135,8 @@ public class ExtractMetadata
             return;
         }
         System.out.println(title);
-        Iterator<String> iter = list.iterator();
-        while (iter.hasNext())
+        for (String string : list)
         {
-            String string = iter.next();
             System.out.println("  " + string);
         }
     }
@@ -161,10 +148,8 @@ public class ExtractMetadata
             return;
         }
         System.out.println(title);
-        Iterator<Calendar> iter = list.iterator();
-        while (iter.hasNext())
+        for (Calendar calendar : list)
         {
-            Calendar calendar = iter.next();
             System.out.println("  " + format(calendar));
         }
     }

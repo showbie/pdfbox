@@ -19,10 +19,16 @@ import junit.framework.TestCase;
 
 import java.io.File;
 import org.apache.pdfbox.examples.pdmodel.CreatePDFA;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
+import org.apache.pdfbox.pdmodel.common.PDMetadata;
 import org.apache.pdfbox.preflight.PreflightDocument;
 import org.apache.pdfbox.preflight.ValidationResult;
 import org.apache.pdfbox.preflight.ValidationResult.ValidationError;
 import org.apache.pdfbox.preflight.parser.PreflightParser;
+import org.apache.xmpbox.XMPMetadata;
+import org.apache.xmpbox.schema.DublinCoreSchema;
+import org.apache.xmpbox.xml.DomXmpParser;
 
 /**
  *
@@ -30,7 +36,7 @@ import org.apache.pdfbox.preflight.parser.PreflightParser;
  */
 public class CreatePDFATest extends TestCase
 {
-    private final String outDir = "target/test-output/";
+    private final String outDir = "target/test-output";
 
     @Override
     protected void setUp() throws Exception
@@ -53,15 +59,26 @@ public class CreatePDFATest extends TestCase
         
         PreflightParser preflightParser = new PreflightParser(new File(pdfaFilename));
         preflightParser.parse();
-        PreflightDocument preflightDocument = preflightParser.getPreflightDocument();
-        preflightDocument.validate();
-        ValidationResult result = preflightDocument.getResult();
-        for (ValidationError ve : result.getErrorsList())
+        try (PreflightDocument preflightDocument = preflightParser.getPreflightDocument())
         {
-            System.err.println(ve.getErrorCode() + ": " + ve.getDetails());
+            preflightDocument.validate();
+            ValidationResult result = preflightDocument.getResult();
+            for (ValidationError ve : result.getErrorsList())
+            {
+                System.err.println(ve.getErrorCode() + ": " + ve.getDetails());
+            }
+            assertTrue("PDF file created with CreatePDFA is not valid PDF/A-1b", result.isValid());
         }
-        assertTrue("PDF file created with CreatePDFA is not valid PDF/A-1b", result.isValid());
-        preflightDocument.close();
+        
+        // check the XMP metadata
+        PDDocument document = PDDocument.load(new File(pdfaFilename));
+        PDDocumentCatalog catalog = document.getDocumentCatalog();
+        PDMetadata meta = catalog.getMetadata();
+        DomXmpParser xmpParser = new DomXmpParser();
+        XMPMetadata metadata = xmpParser.parse(meta.createInputStream());
+        DublinCoreSchema dc = metadata.getDublinCoreSchema();
+        assertEquals(pdfaFilename, dc.getTitle());
+        document.close();
     }
     
 }

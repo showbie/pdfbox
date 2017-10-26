@@ -17,6 +17,7 @@
 package org.apache.pdfbox.examples.pdmodel;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.List;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -34,7 +35,7 @@ import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationLink;
  *
  * @author Ben Litchfield
  */
-public class ReplaceURLs
+public final class ReplaceURLs
 {
     /**
      * Constructor.
@@ -47,14 +48,14 @@ public class ReplaceURLs
     /**
      * This will read in a document and replace all of the urls with
      * http://pdfbox.apache.org.
-     * <br />
+     * <br>
      * see usage() for commandline
      *
      * @param args Command line arguments.
      *
-     * @throws Exception If there is an error during the process.
+     * @throws IOException If there is an error during the process.
      */
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args) throws IOException
     {
         PDDocument doc = null;
         try

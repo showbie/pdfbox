@@ -20,6 +20,7 @@ import java.io.IOException;
 
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSName;
 
 import org.apache.pdfbox.pdmodel.common.filespecification.PDFileSpecification;
 
@@ -56,28 +57,6 @@ public class PDActionRemoteGoTo extends PDAction
     }
 
     /**
-     * This will get the type of action that the actions dictionary describes.
-     * It must be GoToR for a remote go-to action.
-     *
-     * @return The S entry of the specific remote go-to action dictionary.
-     */
-    public String getS()
-    {
-       return action.getNameAsString( "S" );
-    }
-
-    /**
-     * This will set the type of action that the actions dictionary describes.
-     * It must be GoToR for a remote go-to action.
-     *
-     * @param s The remote go-to action.
-     */
-    public void setS( String s )
-    {
-       action.setName( "S", s );
-    }
-
-    /**
      * This will get the file in which the destination is located.
      *
      * @return The F entry of the specific remote go-to action dictionary.
@@ -86,7 +65,7 @@ public class PDActionRemoteGoTo extends PDAction
      */
     public PDFileSpecification getFile() throws IOException
     {
-        return PDFileSpecification.createFS( action.getDictionaryObject( "F" ) );
+        return PDFileSpecification.createFS( action.getDictionaryObject( COSName.F ) );
     }
 
     /**
@@ -96,7 +75,7 @@ public class PDActionRemoteGoTo extends PDAction
      */
     public void setFile( PDFileSpecification fs )
     {
-        action.setItem( "F", fs );
+        action.setItem( COSName.F, fs );
     }
 
     /**
@@ -112,7 +91,7 @@ public class PDActionRemoteGoTo extends PDAction
     // Array or String.
     public COSBase getD()
     {
-        return action.getDictionaryObject( "D" );
+        return action.getDictionaryObject( COSName.D );
     }
 
     /**
@@ -128,7 +107,7 @@ public class PDActionRemoteGoTo extends PDAction
     // In case the value is an array.
     public void setD( COSBase d )
     {
-        action.setItem( "D", d );
+        action.setItem( COSName.D, d );
     }
 
     /**

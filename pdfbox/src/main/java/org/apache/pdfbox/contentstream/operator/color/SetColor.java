@@ -16,17 +16,18 @@
  */
 package org.apache.pdfbox.contentstream.operator.color;
 
-import org.apache.pdfbox.contentstream.operator.MissingOperandException;
-import org.apache.pdfbox.cos.COSArray;
-import org.apache.pdfbox.cos.COSBase;
-import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
-import org.apache.pdfbox.pdmodel.graphics.color.PDColorSpace;
-import org.apache.pdfbox.contentstream.operator.Operator;
-import org.apache.pdfbox.contentstream.operator.OperatorProcessor;
-
 import java.io.IOException;
 import java.util.List;
-import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceColorSpace;
+
+import org.apache.pdfbox.contentstream.operator.MissingOperandException;
+import org.apache.pdfbox.contentstream.operator.Operator;
+import org.apache.pdfbox.contentstream.operator.OperatorProcessor;
+import org.apache.pdfbox.cos.COSArray;
+import org.apache.pdfbox.cos.COSBase;
+import org.apache.pdfbox.cos.COSNumber;
+import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
+import org.apache.pdfbox.pdmodel.graphics.color.PDColorSpace;
+import org.apache.pdfbox.pdmodel.graphics.color.PDPattern;
 
 /**
  * sc,scn,SC,SCN: Sets the color to use for stroking or non-stroking operations.
@@ -39,10 +40,16 @@ public abstract class SetColor extends OperatorProcessor
     public void process(Operator operator, List<COSBase> arguments) throws IOException
     {
         PDColorSpace colorSpace = getColorSpace();
-        if (colorSpace instanceof PDDeviceColorSpace &&
-            arguments.size() < colorSpace.getNumberOfComponents())
+        if (!(colorSpace instanceof PDPattern))
         {
-            throw new MissingOperandException(operator, arguments);
+            if (arguments.size() < colorSpace.getNumberOfComponents())
+            {
+                throw new MissingOperandException(operator, arguments);
+            }
+            if (!checkArrayTypesClass(arguments, COSNumber.class))
+            {
+                return;
+            }
         }
         COSArray array = new COSArray();
         array.addAll(arguments);

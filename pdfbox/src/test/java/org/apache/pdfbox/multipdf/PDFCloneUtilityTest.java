@@ -22,6 +22,7 @@ import junit.framework.TestCase;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDPageContentStream.AppendMode;
 
 /**
  * Test suite for PDFCloneUtility, see PDFBOX-2052.
@@ -38,15 +39,16 @@ public class PDFCloneUtilityTest extends TestCase
      */
     public void testClonePDFWithCosArrayStream() throws IOException
     {
-        PDDocument srcDoc = new PDDocument();
-        PDDocument dstDoc = new PDDocument();
-        PDPage pdPage = new PDPage();
-        srcDoc.addPage(pdPage);
-        new PDPageContentStream(srcDoc, pdPage, true, true).close();
-        new PDPageContentStream(srcDoc, pdPage, true, true).close();
-        new PDFCloneUtility(dstDoc).cloneForNewDocument(pdPage.getCOSObject());
-        srcDoc.close();
-        dstDoc.close();
+        try (PDDocument srcDoc = new PDDocument();
+             PDDocument dstDoc = new PDDocument())
+        {
+
+            PDPage pdPage = new PDPage();
+            srcDoc.addPage(pdPage);
+            new PDPageContentStream(srcDoc, pdPage, AppendMode.APPEND, true).close();
+            new PDPageContentStream(srcDoc, pdPage, AppendMode.APPEND, true).close();
+            new PDFCloneUtility(dstDoc).cloneForNewDocument(pdPage.getCOSObject());
+        }
     }
 
     /**
@@ -65,21 +67,24 @@ public class PDFCloneUtilityTest extends TestCase
         PDDocument srcDoc = new PDDocument();
         PDPage pdPage = new PDPage();
         srcDoc.addPage(pdPage);
-        PDPageContentStream pdPageContentStream1 = new PDPageContentStream(srcDoc, pdPage, true, false);
-        pdPageContentStream1.setNonStrokingColor(Color.black);
-        pdPageContentStream1.addRect(100, 600, 300, 100);
-        pdPageContentStream1.fill();
-        pdPageContentStream1.close();
-        PDPageContentStream pdPageContentStream2 = new PDPageContentStream(srcDoc, pdPage, true, false);
-        pdPageContentStream2.setNonStrokingColor(Color.red);
-        pdPageContentStream2.addRect(100, 500, 300, 100);
-        pdPageContentStream2.fill();
-        pdPageContentStream2.close();
-        PDPageContentStream pdPageContentStream3 = new PDPageContentStream(srcDoc, pdPage, true, false);
-        pdPageContentStream3.setNonStrokingColor(Color.yellow);
-        pdPageContentStream3.addRect(100, 400, 300, 100);
-        pdPageContentStream3.fill();
-        pdPageContentStream3.close();
+        try (PDPageContentStream pdPageContentStream1 = new PDPageContentStream(srcDoc, pdPage, AppendMode.APPEND, false))
+        {
+            pdPageContentStream1.setNonStrokingColor(Color.black);
+            pdPageContentStream1.addRect(100, 600, 300, 100);
+            pdPageContentStream1.fill();
+        }
+        try (PDPageContentStream pdPageContentStream2 = new PDPageContentStream(srcDoc, pdPage, AppendMode.APPEND, false))
+        {
+            pdPageContentStream2.setNonStrokingColor(Color.red);
+            pdPageContentStream2.addRect(100, 500, 300, 100);
+            pdPageContentStream2.fill();
+        }
+        try (PDPageContentStream pdPageContentStream3 = new PDPageContentStream(srcDoc, pdPage, AppendMode.APPEND, false))
+        {
+            pdPageContentStream3.setNonStrokingColor(Color.yellow);
+            pdPageContentStream3.addRect(100, 400, 300, 100);
+            pdPageContentStream3.fill();
+        }
 
         srcDoc.save(TESTDIR + CLONESRC);
         PDFMergerUtility merger = new PDFMergerUtility();
@@ -92,8 +97,8 @@ public class PDFCloneUtilityTest extends TestCase
         // save and reload PDF, so that one can see that the files are legit
         dstDoc.save(TESTDIR + CLONEDST);
         PDDocument.load(new File(TESTDIR + CLONESRC)).close();
-        PDDocument.load(new File(TESTDIR + CLONESRC), null).close();
+        PDDocument.load(new File(TESTDIR + CLONESRC), (String)null).close();
         PDDocument.load(new File(TESTDIR + CLONEDST)).close();
-        PDDocument.load(new File(TESTDIR + CLONEDST), null).close();
+        PDDocument.load(new File(TESTDIR + CLONEDST), (String)null).close();
     }
 }

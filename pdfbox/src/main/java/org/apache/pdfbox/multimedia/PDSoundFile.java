@@ -17,10 +17,6 @@ public class PDSoundFile extends PDStream {
 	static public COSName ENCODING_MU_LAW = COSName.getPDFName("muLaw");
 	static public COSName ENCODING_A_LAW = COSName.getPDFName("ALaw");
 
-	public PDSoundFile() {
-		super();
-	}
-
 	public PDSoundFile(PDDocument doc, InputStream str) throws IOException {
 		super(doc, str);
 	}

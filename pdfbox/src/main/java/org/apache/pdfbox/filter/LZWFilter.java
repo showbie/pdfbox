@@ -103,7 +103,7 @@ public class LZWFilter extends Filter
 
     private void doLZWDecode(InputStream encoded, OutputStream decoded, int earlyChange) throws IOException
     {
-        List<byte[]> codeTable = new ArrayList<byte[]>();
+        List<byte[]> codeTable = new ArrayList<>();
         int chunk = 9;
         final MemoryCacheImageInputStream in = new MemoryCacheImageInputStream(encoded);
         long nextCommand;
@@ -128,6 +128,7 @@ public class LZWFilter extends Filter
                         decoded.write(data);
                         if (prevCommand != -1)
                         {
+                            checkIndexBounds(codeTable, prevCommand, in);
                             data = codeTable.get((int) prevCommand);
                             byte[] newData = Arrays.copyOf(data, data.length + 1);
                             newData[data.length] = firstByte;
@@ -136,6 +137,7 @@ public class LZWFilter extends Filter
                     }
                     else
                     {
+                        checkIndexBounds(codeTable, prevCommand, in);
                         byte[] data = codeTable.get((int) prevCommand);
                         byte[] newData = Arrays.copyOf(data, data.length + 1);
                         newData[data.length] = data[0];
@@ -155,6 +157,22 @@ public class LZWFilter extends Filter
         decoded.flush();
     }
 
+    private void checkIndexBounds(List<byte[]> codeTable, long index, MemoryCacheImageInputStream in)
+            throws IOException
+    {
+        if (index < 0)
+        {
+            throw new IOException("negative array index: " + index + " near offset "
+                    + in.getStreamPosition());
+        }
+        if (index >= codeTable.size())
+        {
+            throw new IOException("array index overflow: " + index +
+                    " >= " + codeTable.size() + " near offset "
+                    + in.getStreamPosition());
+        }
+    }
+
     /**
      * {@inheritDoc}
      */
@@ -166,68 +184,69 @@ public class LZWFilter extends Filter
         int chunk = 9;
 
         byte[] inputPattern = null;
-        final MemoryCacheImageOutputStream out = new MemoryCacheImageOutputStream(encoded);
-        out.writeBits(CLEAR_TABLE, chunk);
-        int foundCode = -1;
-        int r;
-        while ((r = rawData.read()) != -1)
+        try (MemoryCacheImageOutputStream out = new MemoryCacheImageOutputStream(encoded))
         {
-            byte by = (byte) r;
-            if (inputPattern == null)
+            out.writeBits(CLEAR_TABLE, chunk);
+            int foundCode = -1;
+            int r;
+            while ((r = rawData.read()) != -1)
             {
-                inputPattern = new byte[] { by };
-                foundCode = by & 0xff;
-            }
-            else
-            {
-                inputPattern = Arrays.copyOf(inputPattern, inputPattern.length + 1);
-                inputPattern[inputPattern.length - 1] = by;
-                int newFoundCode = findPatternCode(codeTable, inputPattern);
-                if (newFoundCode == -1)
+                byte by = (byte) r;
+                if (inputPattern == null)
                 {
-                    // use previous
-                    chunk = calculateChunk(codeTable.size() - 1, 1);
-                    out.writeBits(foundCode, chunk);
-                    // create new table entry
-                    codeTable.add(inputPattern);
-
-                    if (codeTable.size() == 4096)
-                    {
-                        // code table is full
-                        out.writeBits(CLEAR_TABLE, chunk);
-                        codeTable = createCodeTable();
-                    }
-
                     inputPattern = new byte[] { by };
                     foundCode = by & 0xff;
                 }
                 else
                 {
-                    foundCode = newFoundCode;
+                    inputPattern = Arrays.copyOf(inputPattern, inputPattern.length + 1);
+                    inputPattern[inputPattern.length - 1] = by;
+                    int newFoundCode = findPatternCode(codeTable, inputPattern);
+                    if (newFoundCode == -1)
+                    {
+                        // use previous
+                        chunk = calculateChunk(codeTable.size() - 1, 1);
+                        out.writeBits(foundCode, chunk);
+                        // create new table entry
+                        codeTable.add(inputPattern);
+                        
+                        if (codeTable.size() == 4096)
+                        {
+                            // code table is full
+                            out.writeBits(CLEAR_TABLE, chunk);
+                            codeTable = createCodeTable();
+                        }
+                        
+                        inputPattern = new byte[] { by };
+                        foundCode = by & 0xff;
+                    }
+                    else
+                    {
+                        foundCode = newFoundCode;
+                    }
                 }
             }
+            if (foundCode != -1)
+            {
+                chunk = calculateChunk(codeTable.size() - 1, 1);
+                out.writeBits(foundCode, chunk);
+            }
+            
+            // PPDFBOX-1977: the decoder wouldn't know that the encoder would output
+            // an EOD as code, so he would have increased his own code table and
+            // possibly adjusted the chunk. Therefore, the encoder must behave as
+            // if the code table had just grown and thus it must be checked it is
+            // needed to adjust the chunk, based on an increased table size parameter
+            chunk = calculateChunk(codeTable.size(), 1);
+            
+            out.writeBits(EOD, chunk);
+            
+            // pad with 0
+            out.writeBits(0, 7);
+            
+            // must do or file will be empty :-(
+            out.flush();
         }
-        if (foundCode != -1)
-        {
-            chunk = calculateChunk(codeTable.size() - 1, 1);
-            out.writeBits(foundCode, chunk);
-        }
-
-        // PPDFBOX-1977: the decoder wouldn't know that the encoder would output 
-        // an EOD as code, so he would have increased his own code table and 
-        // possibly adjusted the chunk. Therefore, the encoder must behave as 
-        // if the code table had just grown and thus it must be checked it is
-        // needed to adjust the chunk, based on an increased table size parameter
-        chunk = calculateChunk(codeTable.size(), 1);
-
-        out.writeBits(EOD, chunk);
-        
-        // pad with 0
-        out.writeBits(0, 7);
-        
-        // must do or file will be empty :-(
-        out.flush();
-        out.close();
     }
 
     /**
@@ -274,7 +293,7 @@ public class LZWFilter extends Filter
      */
     private List<byte[]> createCodeTable()
     {
-        List<byte[]> codeTable = new ArrayList<byte[]>(4096);
+        List<byte[]> codeTable = new ArrayList<>(4096);
         for (int i = 0; i < 256; ++i)
         {
             codeTable.add(new byte[] { (byte) (i & 0xFF) });

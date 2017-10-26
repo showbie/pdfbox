@@ -22,6 +22,7 @@ import java.util.List;
 
 import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
+import org.apache.pdfbox.cos.COSBoolean;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSObject;
@@ -39,6 +40,8 @@ import org.apache.pdfbox.pdmodel.interactive.action.PDActionFactory;
 import org.apache.pdfbox.pdmodel.interactive.action.PDDocumentCatalogAdditionalActions;
 import org.apache.pdfbox.pdmodel.interactive.action.PDURIDictionary;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDNamedDestination;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.form.PDAcroForm;
 import org.apache.pdfbox.pdmodel.interactive.pagenavigation.PDThread;
@@ -123,7 +126,7 @@ public class PDDocumentCatalog implements COSObjectable
     public PDPageTree getPages()
     {
         // todo: cache me?
-        return new PDPageTree((COSDictionary)root.getDictionaryObject(COSName.PAGES));
+        return new PDPageTree((COSDictionary)root.getDictionaryObject(COSName.PAGES), document);
     }
 
     /**
@@ -133,8 +136,8 @@ public class PDDocumentCatalog implements COSObjectable
      */
     public PDViewerPreferences getViewerPreferences()
     {
-        COSDictionary dict = (COSDictionary)root.getDictionaryObject(COSName.VIEWER_PREFERENCES);
-        return dict == null ? null : new PDViewerPreferences(dict);
+        COSBase base = root.getDictionaryObject(COSName.VIEWER_PREFERENCES);
+        return base instanceof COSDictionary ? new PDViewerPreferences((COSDictionary) base) : null;
     }
 
     /**
@@ -179,12 +182,12 @@ public class PDDocumentCatalog implements COSObjectable
             array = new COSArray();
             root.setItem(COSName.THREADS, array);
         }
-        List<PDThread> pdObjects = new ArrayList<PDThread>();
+        List<PDThread> pdObjects = new ArrayList<>();
         for (int i = 0; i < array.size(); i++)
         {
             pdObjects.add(new PDThread((COSDictionary)array.getObject(i)));
         }
-        return new COSArrayList<PDThread>(pdObjects, array);
+        return new COSArrayList<>(pdObjects, array);
     }
 
     /**
@@ -192,7 +195,7 @@ public class PDDocumentCatalog implements COSObjectable
      *
      * @param threads The list of threads, or null to clear it.
      */
-    public void setThreads(List threads)
+    public void setThreads(List<PDThread> threads)
     {
         root.setItem(COSName.THREADS, COSArrayList.converterToCOSArray(threads));
     }
@@ -245,6 +248,17 @@ public class PDDocumentCatalog implements COSObjectable
         if (openAction == null)
         {
             return null;
+        }
+        else if (openAction instanceof COSBoolean)
+        {
+            if (((COSBoolean) openAction).getValue() == false)
+            {
+                return null;
+            }
+            else
+            {
+                throw new IOException("Can't create OpenAction from COSBoolean");
+            }
         }
         else if (openAction instanceof COSDictionary)
         {
@@ -307,6 +321,38 @@ public class PDDocumentCatalog implements COSObjectable
     }
     
     /**
+     * Find the page destination from a named destination.
+     * @param namedDest the named destination.
+     * @return a PDPageDestination object or null if not found.
+     * @throws IOException if there is an error creating the PDPageDestination object.
+     */
+    public PDPageDestination findNamedDestinationPage(PDNamedDestination namedDest)
+            throws IOException
+    {
+        PDPageDestination pageDestination = null;
+        PDDocumentNameDictionary namesDict = getNames();
+        if (namesDict != null)
+        {
+            PDDestinationNameTreeNode destsTree = namesDict.getDests();
+            if (destsTree != null)
+            {
+                pageDestination = destsTree.getValue(namedDest.getNamedDestination());
+            }
+        }
+        if (pageDestination == null)
+        {
+            // Look up /Dests dictionary from catalog
+            PDDocumentNameDestinationDictionary nameDestDict = getDests();
+            if (nameDestDict != null)
+            {
+                String name = namedDest.getNamedDestination();
+                pageDestination = (PDPageDestination) nameDestDict.getDestination(name);
+            }
+        }
+        return pageDestination;
+    }
+    
+    /**
      * Sets the names dictionary for the document.
      *
      * @param names The names dictionary that is associated with this document.
@@ -345,7 +391,7 @@ public class PDDocumentCatalog implements COSObjectable
      */
     public List<PDOutputIntent> getOutputIntents()
     {
-        List<PDOutputIntent> retval = new ArrayList<PDOutputIntent>();
+        List<PDOutputIntent> retval = new ArrayList<>();
         COSArray array = (COSArray)root.getDictionaryObject(COSName.OUTPUT_INTENTS);
         if (array != null)
         {
@@ -403,7 +449,14 @@ public class PDDocumentCatalog implements COSObjectable
         String mode = root.getNameAsString(COSName.PAGE_MODE);
         if (mode != null)
         {
-            return PageMode.fromString(mode);
+            try
+            {
+                return PageMode.fromString(mode);
+            }
+            catch (IllegalArgumentException e)
+            {
+                return PageMode.USE_NONE;
+            }
         }
         else
         {
@@ -557,7 +610,8 @@ public class PDDocumentCatalog implements COSObjectable
     }
 
     /**
-     * Sets the optional content properties dictionary.
+     * Sets the optional content properties dictionary. The document version is incremented to 1.5
+     * if lower.
      *
      * @param ocProperties the optional properties dictionary
      */

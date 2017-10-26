@@ -17,7 +17,6 @@
 package org.apache.pdfbox.pdmodel.common;
 
 import java.io.IOException;
-import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -91,12 +90,12 @@ public class PDNumberTreeNode implements COSObjectable
         COSArray kids = (COSArray)node.getDictionaryObject( COSName.KIDS );
         if( kids != null )
         {
-            List<PDNumberTreeNode> pdObjects = new ArrayList<PDNumberTreeNode>();
+            List<PDNumberTreeNode> pdObjects = new ArrayList<>();
             for( int i=0; i<kids.size(); i++ )
             {
                 pdObjects.add( createChildNode( (COSDictionary)kids.getObject(i) ) );
             }
-            retval = new COSArrayList<PDNumberTreeNode>(pdObjects,kids);
+            retval = new COSArrayList<>(pdObjects,kids);
         }
 
         return retval;
@@ -109,7 +108,7 @@ public class PDNumberTreeNode implements COSObjectable
      */
     public void setKids( List<? extends PDNumberTreeNode> kids )
     {
-        if (kids != null && kids.size() > 0)
+        if (kids != null && !kids.isEmpty())
         {
             PDNumberTreeNode firstKid = kids.get(0);
             PDNumberTreeNode lastKid = kids.get(kids.size() - 1);
@@ -135,33 +134,30 @@ public class PDNumberTreeNode implements COSObjectable
      *
      * @throws IOException If there is a problem creating the values.
      */
-    public Object getValue( Integer index ) throws IOException
+    public Object getValue(Integer index) throws IOException
     {
-        Object retval = null;
-        Map<Integer,COSObjectable> names = getNumbers();
-        if( names != null )
+        Map<Integer, COSObjectable> names = getNumbers();
+        if (names != null)
         {
-            retval = names.get( index );
+            return names.get(index);
+        }
+        Object retval = null;
+        List<PDNumberTreeNode> kids = getKids();
+        if (kids != null)
+        {
+            for (int i = 0; i < kids.size() && retval == null; i++)
+            {
+                PDNumberTreeNode childNode = kids.get(i);
+                if (childNode.getLowerLimit().compareTo(index) <= 0 &&
+                    childNode.getUpperLimit().compareTo(index) >= 0)
+                {
+                    retval = childNode.getValue(index);
+                }
+            }
         }
         else
         {
-            List<PDNumberTreeNode> kids = getKids();
-            if ( kids != null )
-            {
-                for( int i=0; i<kids.size() && retval == null; i++ )
-                {
-                    PDNumberTreeNode childNode = kids.get( i );
-                    if( childNode.getLowerLimit().compareTo( index ) <= 0 &&
-                        childNode.getUpperLimit().compareTo( index ) >= 0 )
-                    {
-                        retval = childNode.getValue( index );
-                    }
-                }
-            }
-            else
-            {
-                LOG.warn("NumberTreeNode does not have \"nums\" nor \"kids\" objects.");
-            }
+            LOG.warn("NumberTreeNode does not have \"nums\" nor \"kids\" objects.");
         }
         return retval;
     }
@@ -181,7 +177,7 @@ public class PDNumberTreeNode implements COSObjectable
         COSArray namesArray = (COSArray)node.getDictionaryObject( COSName.NUMS );
         if( namesArray != null )
         {
-            indices = new HashMap<Integer,COSObjectable>();
+            indices = new HashMap<>();
             for( int i=0; i<namesArray.size(); i+=2 )
             {
                 COSInteger key = (COSInteger)namesArray.getObject(i);
@@ -205,17 +201,14 @@ public class PDNumberTreeNode implements COSObjectable
      */
     protected COSObjectable convertCOSToPD( COSBase base ) throws IOException
     {
-        COSObjectable retval = null;
         try
         {
-            Constructor<? extends COSObjectable> ctor = valueType.getConstructor( new Class[] { base.getClass() } );
-            retval = ctor.newInstance( new Object[] { base } );
+            return valueType.getDeclaredConstructor(base.getClass()).newInstance(base);
         }
         catch( Throwable t )
         {
-            throw new IOException( "Error while trying to create value in number tree:" + t.getMessage(), t);
+            throw new IOException("Error while trying to create value in number tree:" + t.getMessage(), t);
         }
-        return retval;
     }
 
     /**
@@ -245,7 +238,7 @@ public class PDNumberTreeNode implements COSObjectable
         }
         else
         {
-            List<Integer> keys = new ArrayList<Integer>( numbers.keySet() );
+            List<Integer> keys = new ArrayList<>( numbers.keySet() );
             Collections.sort( keys );
             COSArray array = new COSArray();
             for (Integer key : keys)
@@ -256,7 +249,7 @@ public class PDNumberTreeNode implements COSObjectable
             }
             Integer lower = null;
             Integer upper = null;
-            if( keys.size() > 0 )
+            if (!keys.isEmpty())
             {
                 lower = keys.get( 0 );
                 upper = keys.get( keys.size()-1 );

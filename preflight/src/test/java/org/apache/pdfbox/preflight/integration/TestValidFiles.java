@@ -29,9 +29,9 @@ import java.util.Collection;
 import java.util.List;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.preflight.PreflightDocument;
 import org.apache.pdfbox.preflight.ValidationResult;
 import org.apache.pdfbox.preflight.exception.ValidationException;
@@ -69,7 +69,7 @@ public class TestValidFiles
     protected static Collection<Object[]> stopIfExpected() throws Exception
     {
         // throw new Exception("Test badly configured");
-        List<Object[]> ret = new ArrayList<Object[]>();
+        List<Object[]> ret = new ArrayList<>();
         ret.add(new Object[] { null });
         return ret;
     }
@@ -87,7 +87,7 @@ public class TestValidFiles
         File root = new File(isartor);
         // load expected errors
         // prepare config
-        List<Object[]> data = new ArrayList<Object[]>();
+        List<Object[]> data = new ArrayList<>();
         Collection<?> files = FileUtils.listFiles(root, new String[] { "pdf" }, true);
 
         for (Object object : files)

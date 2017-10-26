@@ -24,6 +24,7 @@ import java.awt.image.DataBuffer;
 import java.awt.image.Raster;
 import java.awt.image.WritableRaster;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -140,33 +141,31 @@ public class PDDeviceN extends PDSpecialColorSpace
 
         // spot colorants
         spotColorSpaces = new PDSeparation[numColorants];
-        if (attributes.getColorants() != null)
+
+        // spot color spaces
+        Map<String, PDSeparation> spotColorants = attributes.getColorants();
+
+        // map each colorant to the corresponding spot color space
+        for (int c = 0; c < numColorants; c++)
         {
-            // spot color spaces
-            Map<String, PDSeparation> spotColorants = attributes.getColorants();
-
-            // map each colorant to the corresponding spot color space
-            for (int c = 0; c < numColorants; c++)
+            String name = colorantNames.get(c);
+            PDSeparation spot = spotColorants.get(name);
+            if (spot != null)
             {
-                String name = colorantNames.get(c);
-                PDSeparation spot = spotColorants.get(name);
-                if (spot != null)
-                {
-                    // spot colorant
-                    spotColorSpaces[c] = spot;
+                // spot colorant
+                spotColorSpaces[c] = spot;
 
-                    // spot colors may replace process colors with same name
-                    // providing that the subtype is not NChannel.
-                    if (!isNChannel())
-                    {
-                        colorantToComponent[c] = -1;
-                    }
-                }
-                else
+                // spot colors may replace process colors with same name
+                // providing that the subtype is not NChannel.
+                if (!isNChannel())
                 {
-                    // process colorant
-                    spotColorSpaces[c] = null;
+                    colorantToComponent[c] = -1;
                 }
+            }
+            else
+            {
+                // process colorant
+                spotColorSpaces[c] = null;
             }
         }
     }
@@ -281,6 +280,10 @@ public class PDDeviceN extends PDSpecialColorSpace
     //
     private BufferedImage toRGBWithTintTransform(WritableRaster raster) throws IOException
     {
+        // map only in use if one color component
+        Map<Float,int[]> map1 = new HashMap<>();
+        float key = 0;
+
         int width = raster.getWidth();
         int height = raster.getHeight();
 
@@ -296,9 +299,20 @@ public class PDDeviceN extends PDSpecialColorSpace
             for (int x = 0; x < width; x++)
             {
                 raster.getPixel(x, y, src);
-
-                int[] intSrc = new int[numSrcComponents];
-                raster.getPixel(x, y, intSrc);
+                if (numSrcComponents == 1)
+                {
+                    int[] pxl = map1.get(src[0]);
+                    if (pxl != null)
+                    {
+                        rgbRaster.setPixel(x, y, pxl);
+                        continue;
+                    }
+                    else
+                    {
+                        // need to remember key because src is modified
+                        key = src[0];
+                    }
+                }
 
                 // scale to 0..1
                 for (int s = 0; s < numSrcComponents; s++)
@@ -317,6 +331,12 @@ public class PDDeviceN extends PDSpecialColorSpace
                     // scale to 0..255
                     rgb[s] = (int) (rgbFloat[s] * 255f);
                 }                
+
+                if (numSrcComponents == 1)
+                {
+                    // must clone because rgb is reused
+                    map1.put(key, rgb.clone());
+                }
 
                 rgbRaster.setPixel(x, y, rgb);
             }

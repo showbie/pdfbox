@@ -39,6 +39,7 @@ import org.apache.pdfbox.cos.COSStream;
 import org.apache.pdfbox.cos.COSString;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.cos.COSObjectKey;
+import org.apache.pdfbox.io.ScratchFile;
 import org.junit.Test;
 
 public class TestCOSUtils
@@ -203,7 +204,7 @@ public class TestCOSUtils
 
     protected void addToXref(COSDocument doc, COSObjectKey key, long value)
     {
-        Map<COSObjectKey, Long> xrefTable = new HashMap<COSObjectKey, Long>(1);
+        Map<COSObjectKey, Long> xrefTable = new HashMap<>(1);
         xrefTable.put(key, value);
         doc.addXRefTable(xrefTable);
     }
@@ -221,7 +222,7 @@ public class TestCOSUtils
 
         IOCOSDocument(File scratchDir) throws IOException
         {
-            super(scratchDir, true);
+            super(new ScratchFile(scratchDir));
         }
 
         @Override

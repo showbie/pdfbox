@@ -29,7 +29,7 @@ import java.util.Map;
 import org.apache.xmpbox.XMPMetadata;
 
 /**
- * Astract Object representation of a XMP 'field' (-> Properties and specific Schemas)
+ * Astract Object representation of a XMP 'field' (-&gt; Properties and specific Schemas)
  * 
  * @author a183132
  * 
@@ -55,7 +55,7 @@ public abstract class AbstractField
     {
         this.metadata = metadata;
         this.propertyName = propertyName;
-        attributes = new HashMap<String, Attribute>();
+        attributes = new HashMap<>();
     }
 
     /**
@@ -120,7 +120,7 @@ public abstract class AbstractField
      */
     public final List<Attribute> getAllAttributes()
     {
-        return new ArrayList<Attribute>(attributes.values());
+        return new ArrayList<>(attributes.values());
     }
 
     /**

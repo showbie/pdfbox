@@ -60,7 +60,7 @@ public class TestDerivedType
     @Parameters
     public static Collection<Object[]> initializeParameters() throws Exception
     {
-        Collection<Object[]> result = new ArrayList<Object[]>();
+        Collection<Object[]> result = new ArrayList<>();
 
         result.add(new Object[] { AgentNameType.class, "AgentName" });
         result.add(new Object[] { ChoiceType.class, "Choice" });
@@ -82,8 +82,8 @@ public class TestDerivedType
     public void before() throws Exception
     {
         xmp = XMPMetadata.createXMPMetadata();
-        constructor = clz.getConstructor(new Class[] { XMPMetadata.class, String.class, String.class, String.class,
-                Object.class });
+        constructor = clz.getDeclaredConstructor(XMPMetadata.class, String.class, String.class, String.class,
+                Object.class);
     }
 
     protected TextType instanciate(XMPMetadata metadata, String namespaceURI, String prefix, String propertyName,

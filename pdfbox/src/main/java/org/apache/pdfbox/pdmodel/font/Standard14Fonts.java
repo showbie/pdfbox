@@ -40,14 +40,13 @@ final class Standard14Fonts
     {
     }
 
-    private static final Set<String> STANDARD_14_NAMES = new HashSet<String>();
-    private static final Map<String, String> STANDARD_14_MAPPING = new HashMap<String, String>();
-    private static final Map<String, FontMetrics> STANDARD14_AFM_MAP;
+    private static final Set<String> STANDARD_14_NAMES = new HashSet<>(34);
+    private static final Map<String, String> STANDARD_14_MAPPING = new HashMap<>(34);
+    private static final Map<String, FontMetrics> STANDARD14_AFM_MAP =  new HashMap<>(34);
     static
     {
         try
         {
-            STANDARD14_AFM_MAP = new HashMap<String, FontMetrics>();
             addAFM("Courier-Bold");
             addAFM("Courier-BoldOblique");
             addAFM("Courier");
@@ -112,16 +111,11 @@ final class Standard14Fonts
         URL url = PDType1Font.class.getClassLoader().getResource(resourceName);
         if (url != null)
         {
-            InputStream afmStream = url.openStream();
-            try
+            try (InputStream afmStream = url.openStream())
             {
                 AFMParser parser = new AFMParser(afmStream);
-                FontMetrics metric = parser.parse();
+                FontMetrics metric = parser.parse(true);
                 STANDARD14_AFM_MAP.put(fontName, metric);
-            }
-            finally
-            {
-                afmStream.close();
             }
         }
         else

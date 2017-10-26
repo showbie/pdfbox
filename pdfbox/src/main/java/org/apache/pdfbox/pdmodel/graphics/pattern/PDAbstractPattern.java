@@ -27,7 +27,7 @@ import org.apache.pdfbox.pdmodel.common.COSObjectable;
 import org.apache.pdfbox.util.Matrix;
 
 /**
- * A Pattern dictionary from a page's resources.
+ * This class wraps a pattern dictionary. Patterns can be found in resource dictionaries.
  */
 public abstract class PDAbstractPattern implements COSObjectable
 {
@@ -39,21 +39,21 @@ public abstract class PDAbstractPattern implements COSObjectable
 
     /**
      * Create the correct PD Model pattern based on the COS base pattern.
-     * @param resourceDictionary the COS pattern dictionary
-     * @return the newly created pattern resources object
+     * @param dictionary the COS pattern dictionary
+     * @return the newly created pattern object
      * @throws IOException If we are unable to create the PDPattern object.
      */
-    public static PDAbstractPattern create(COSDictionary resourceDictionary) throws IOException
+    public static PDAbstractPattern create(COSDictionary dictionary) throws IOException
     {
         PDAbstractPattern pattern;
-        int patternType = resourceDictionary.getInt(COSName.PATTERN_TYPE, 0);
+        int patternType = dictionary.getInt(COSName.PATTERN_TYPE, 0);
         switch (patternType)
         {
             case TYPE_TILING_PATTERN:
-                pattern = new PDTilingPattern(resourceDictionary);
+                pattern = new PDTilingPattern(dictionary);
                 break;
             case TYPE_SHADING_PATTERN:
-                pattern = new PDShadingPattern(resourceDictionary);
+                pattern = new PDShadingPattern(dictionary);
                 break;
             default:
                 throw new IOException("Error: Unknown pattern type " + patternType);
@@ -74,57 +74,21 @@ public abstract class PDAbstractPattern implements COSObjectable
 
     /**
      * Creates a new Pattern dictionary from the given COS dictionary.
-     * @param resourceDictionary The COSDictionary for this pattern resource.
+     * @param dictionary The COSDictionary for this pattern.
      */
-    public PDAbstractPattern(COSDictionary resourceDictionary)
+    public PDAbstractPattern(COSDictionary dictionary)
     {
-        patternDictionary = resourceDictionary;
+        patternDictionary = dictionary;
     }
 
     /**
      * This will get the underlying dictionary.
-     * @return The dictionary for these pattern resources.
+     * @return The dictionary for this pattern.
      */
     @Override
     public COSDictionary getCOSObject()
     {
         return patternDictionary;
-    }
-
-    /**
-     * Sets the filter entry of the encryption dictionary.
-     * @param filter The filter name.
-     */
-    public void setFilter(String filter)
-    {
-        patternDictionary.setItem(COSName.FILTER, COSName.getPDFName(filter));
-    }
-
-    /**
-     * Get the name of the filter.
-     * @return The filter name contained in this encryption dictionary.
-     */
-    public String getFilter()
-    {
-        return patternDictionary.getNameAsString(COSName.FILTER);
-    }
-
-    /**
-     * This will set the length of the content stream.
-     * @param length The new stream length.
-     */
-    public void setLength(int length)
-    {
-        patternDictionary.setInt(COSName.LENGTH, length);
-    }
-
-    /**
-     * This will return the length of the content stream.
-     * @return The length of the content stream
-     */
-    public int getLength()
-    {
-        return patternDictionary.getInt(COSName.LENGTH, 0);
     }
 
     /**

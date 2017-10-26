@@ -105,7 +105,7 @@ extends InputStream implements RandomAccessRead
      * Create a random access input stream for the given input stream by copying the data to a
      * temporary file.
      *
-     * @param input the input stream to be read.
+     * @param input the input stream to be read. It will be closed by this method.
      * @throws IOException if something went wrong while creating the temporary file.
      */
     public RandomAccessBufferedFileInputStream( InputStream input ) throws IOException 
@@ -118,18 +118,15 @@ extends InputStream implements RandomAccessRead
 
     private File createTmpFile(InputStream input) throws IOException
     {
-        FileOutputStream fos = null;
-        try
+        File tmpFile = File.createTempFile(TMP_FILE_PREFIX, ".pdf");
+        try (FileOutputStream fos = new FileOutputStream(tmpFile))
         {
-            File tmpFile = File.createTempFile(TMP_FILE_PREFIX, ".pdf");
-            fos = new FileOutputStream(tmpFile);
             IOUtils.copy(input, fos);
             return tmpFile;
         }
         finally
         {
             IOUtils.closeQuietly(input);
-            IOUtils.closeQuietly(fos);
         }
     }
 

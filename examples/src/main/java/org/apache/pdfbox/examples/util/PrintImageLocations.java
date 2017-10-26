@@ -41,8 +41,6 @@ import org.apache.pdfbox.contentstream.operator.state.SetMatrix;
 /**
  * This is an example on how to get the x/y coordinates of image locations.
  *
- * Usage: java org.apache.pdfbox.examples.util.PrintImageLocations &lt;input-pdf&gt;
- *
  * @author Ben Litchfield
  */
 public class PrintImageLocations extends PDFStreamEngine
@@ -67,9 +65,9 @@ public class PrintImageLocations extends PDFStreamEngine
      *
      * @param args The command line arguments.
      *
-     * @throws Exception If there is an error parsing the document.
+     * @throws IOException If there is an error parsing the document.
      */
-    public static void main( String[] args ) throws Exception
+    public static void main( String[] args ) throws IOException
     {
         if( args.length != 1 )
         {
@@ -77,10 +75,8 @@ public class PrintImageLocations extends PDFStreamEngine
         }
         else
         {
-            PDDocument document = null;
-            try
+            try (PDDocument document = PDDocument.load(new File(args[0])))
             {
-                document = PDDocument.load( new File(args[0]) );
                 PrintImageLocations printer = new PrintImageLocations();
                 int pageNum = 0;
                 for( PDPage page : document.getPages() )
@@ -88,13 +84,6 @@ public class PrintImageLocations extends PDFStreamEngine
                     pageNum++;
                     System.out.println( "Processing page: " + pageNum );
                     printer.processPage(page);
-                }
-            }
-            finally
-            {
-                if( document != null )
-                {
-                    document.close();
                 }
             }
         }
@@ -127,19 +116,21 @@ public class PrintImageLocations extends PDFStreamEngine
                 Matrix ctmNew = getGraphicsState().getCurrentTransformationMatrix();
                 float imageXScale = ctmNew.getScalingFactorX();
                 float imageYScale = ctmNew.getScalingFactorY();
-                System.out.println("position = " + ctmNew.getTranslateX() + ", " + ctmNew.getTranslateY());
-                // size in pixel
-                System.out.println("size = " + imageWidth + "px, " + imageHeight + "px");
-                // size in page units
-                System.out.println("size = " + imageXScale + "pu, " + imageYScale + "pu");
-                // size in inches 
+
+                // position in user space units. 1 unit = 1/72 inch at 72 dpi
+                System.out.println("position in PDF = " + ctmNew.getTranslateX() + ", " + ctmNew.getTranslateY() + " in user space units");
+                // raw size in pixels
+                System.out.println("raw image size  = " + imageWidth + ", " + imageHeight + " in pixels");
+                // displayed size in user space units
+                System.out.println("displayed size  = " + imageXScale + ", " + imageYScale + " in user space units");
+                // displayed size in inches at 72 dpi rendering
                 imageXScale /= 72;
                 imageYScale /= 72;
-                System.out.println("size = " + imageXScale + "in, " + imageYScale + "in");
-                // size in millimeter
+                System.out.println("displayed size  = " + imageXScale + ", " + imageYScale + " in inches at 72 dpi rendering");
+                // displayed size in millimeters at 72 dpi rendering
                 imageXScale *= 25.4;
                 imageYScale *= 25.4;
-                System.out.println("size = " + imageXScale + "mm, " + imageYScale + "mm");
+                System.out.println("displayed size  = " + imageXScale + ", " + imageYScale + " in millimeters at 72 dpi rendering");
                 System.out.println();
             }
             else if(xobject instanceof PDFormXObject)
@@ -159,7 +150,7 @@ public class PrintImageLocations extends PDFStreamEngine
      */
     private static void usage()
     {
-        System.err.println( "Usage: java org.apache.pdfbox.examples.pdmodel.PrintImageLocations <input-pdf>" );
+        System.err.println( "Usage: java " + PrintImageLocations.class.getName() + " <input-pdf>" );
     }
 
 }

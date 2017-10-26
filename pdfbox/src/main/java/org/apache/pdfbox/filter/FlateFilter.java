@@ -57,7 +57,6 @@ final class FlateFilter extends Filter
         {
             if (predictor > 1)
             {
-                @SuppressWarnings("null")
                 int colors = Math.min(decodeParams.getInt(COSName.COLORS, 1), 32);
                 int bitsPerPixel = decodeParams.getInt(COSName.BITS_PER_COMPONENT, 8);
                 int columns = decodeParams.getInt(COSName.COLUMNS, 1);
@@ -89,19 +88,42 @@ final class FlateFilter extends Filter
     // missing Z_STREAM_END, see PDFBOX-1232 for details
     private void decompress(InputStream in, OutputStream out) throws IOException, DataFormatException 
     { 
-        byte[] buf = new byte[2048]; 
+        byte[] buf = new byte[2048];
+        // skip zlib header
+        in.read(buf,0,2);
         int read = in.read(buf); 
         if (read > 0) 
         { 
-            Inflater inflater = new Inflater(); 
-            inflater.setInput(buf,0,read); 
-            byte[] res = new byte[2048]; 
+            // use nowrap mode to bypass zlib-header and checksum to avoid a DataFormatException
+            Inflater inflater = new Inflater(true); 
+            inflater.setInput(buf,0,read);
+            byte[] res = new byte[1024]; 
+            boolean dataWritten = false;
             while (true) 
             { 
-                int resRead = inflater.inflate(res); 
+                int resRead = 0;
+                try
+                {
+                    resRead = inflater.inflate(res);
+                }
+                catch(DataFormatException exception)
+                {
+                    if (dataWritten)
+                    {
+                        // some data could be read -> don't throw an exception
+                        LOG.warn("FlateFilter: premature end of stream due to a DataFormatException");
+                        break;
+                    }
+                    else
+                    {
+                        // nothing could be read -> re-throw exception
+                        throw exception;
+                    }
+                }
                 if (resRead != 0) 
                 { 
-                    out.write(res,0,resRead); 
+                    out.write(res,0,resRead);
+                    dataWritten = true;
                     continue; 
                 } 
                 if (inflater.finished() || inflater.needsDictionary() || in.available() == 0) 
@@ -109,8 +131,9 @@ final class FlateFilter extends Filter
                     break;
                 } 
                 read = in.read(buf); 
-                inflater.setInput(buf,0,read); 
+                inflater.setInput(buf,0,read);
             }
+            inflater.end();
         }
         out.flush();
     }
@@ -119,18 +142,19 @@ final class FlateFilter extends Filter
     protected void encode(InputStream input, OutputStream encoded, COSDictionary parameters)
             throws IOException
     {
-        DeflaterOutputStream out = new DeflaterOutputStream(encoded);
-        int amountRead;
-        int mayRead = input.available();
-        if (mayRead > 0)
+        try (DeflaterOutputStream out = new DeflaterOutputStream(encoded))
         {
-            byte[] buffer = new byte[Math.min(mayRead,BUFFER_SIZE)];
-            while ((amountRead = input.read(buffer, 0, Math.min(mayRead,BUFFER_SIZE))) != -1)
+            int amountRead;
+            int mayRead = input.available();
+            if (mayRead > 0)
             {
-                out.write(buffer, 0, amountRead);
+                byte[] buffer = new byte[Math.min(mayRead,BUFFER_SIZE)];
+                while ((amountRead = input.read(buffer, 0, Math.min(mayRead,BUFFER_SIZE))) != -1)
+                {
+                    out.write(buffer, 0, amountRead);
+                }
             }
         }
-        out.close();
         encoded.flush();
     }
 }

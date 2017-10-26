@@ -100,7 +100,7 @@ class ShadedTriangle
      */
     private int calcDeg(Point2D[] p)
     {
-        Set<Point> set = new HashSet<Point>();
+        Set<Point> set = new HashSet<>();
         for (Point2D itp : p)
         {
             Point np = new Point((int) Math.round(itp.getX() * 1000), (int) Math.round(itp.getY() * 1000));
@@ -234,30 +234,29 @@ class ShadedTriangle
         int numberOfColorComponents = color[0].length;
         float[] pCol = new float[numberOfColorComponents];
 
-        if (degree == 1)
+        switch (degree)
         {
-            for (int i = 0; i < numberOfColorComponents; i++)
-            {
-                // average
-                pCol[i] = (color[0][i] + color[1][i] + color[2][i]) / 3.0f;
-            }
-        }
-        else if (degree == 2)
-        {
-            // linear interpolation
-            Point tp = new Point((int) Math.round(p.getX()), (int) Math.round(p.getY()));
-            return line.calcColor(tp);
-        }
-        else
-        {
-            float aw = (float) (getArea(p, corner[1], corner[2]) / area);
-            float bw = (float) (getArea(p, corner[2], corner[0]) / area);
-            float cw = (float) (getArea(p, corner[0], corner[1]) / area);
-            for (int i = 0; i < numberOfColorComponents; i++)
-            {
-                // barycentric interpolation
-                pCol[i] = color[0][i] * aw + color[1][i] * bw + color[2][i] * cw;
-            }
+            case 1:
+                for (int i = 0; i < numberOfColorComponents; i++)
+                {
+                    // average
+                    pCol[i] = (color[0][i] + color[1][i] + color[2][i]) / 3.0f;
+                }
+                break;
+            case 2:
+                // linear interpolation
+                Point tp = new Point((int) Math.round(p.getX()), (int) Math.round(p.getY()));
+                return line.calcColor(tp);
+            default:
+                float aw = (float) (getArea(p, corner[1], corner[2]) / area);
+                float bw = (float) (getArea(p, corner[2], corner[0]) / area);
+                float cw = (float) (getArea(p, corner[0], corner[1]) / area);
+                for (int i = 0; i < numberOfColorComponents; i++)
+                {
+                    // barycentric interpolation
+                    pCol[i] = color[0][i] * aw + color[1][i] * bw + color[2][i] * cw;
+                }
+                break;
         }
         return pCol;
     }

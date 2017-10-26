@@ -22,10 +22,10 @@ import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.InputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.Writer;
 
 import org.apache.pdfbox.cos.COSDictionary;
@@ -49,7 +49,6 @@ public class FDFDocument implements Closeable
     /**
      * Constructor, creates a new FDF document.
      *
-     * @throws IOException If there is an error creating this document.
      */
     public FDFDocument()
     {
@@ -147,7 +146,7 @@ public class FDFDocument implements Closeable
      *
      * @param cat The FDF catalog.
      */
-    public void setCatalog(FDFCatalog cat)
+    public final void setCatalog(FDFCatalog cat)
     {
         COSDictionary trailer = document.getTrailer();
         trailer.setItem(COSName.ROOT, cat);
@@ -277,19 +276,9 @@ public class FDFDocument implements Closeable
      */
     public void save(OutputStream output) throws IOException
     {
-        COSWriter writer = null;
-        try
+        try (COSWriter writer = new COSWriter(output))
         {
-            writer = new COSWriter(output);
             writer.write(this);
-            writer.close();
-        }
-        finally
-        {
-            if (writer != null)
-            {
-                writer.close();
-            }
         }
     }
 
@@ -302,7 +291,8 @@ public class FDFDocument implements Closeable
      */
     public void saveXFDF(File fileName) throws IOException
     {
-        saveXFDF(new BufferedWriter(new FileWriter(fileName)));
+        saveXFDF(new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(fileName), "UTF-8")));
     }
 
     /**
@@ -314,7 +304,8 @@ public class FDFDocument implements Closeable
      */
     public void saveXFDF(String fileName) throws IOException
     {
-        saveXFDF(new BufferedWriter(new FileWriter(fileName)));
+        saveXFDF(new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(fileName), "UTF-8")));
     }
 
     /**

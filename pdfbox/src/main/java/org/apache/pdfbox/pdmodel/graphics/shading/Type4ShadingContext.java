@@ -76,13 +76,12 @@ class Type4ShadingContext extends GouraudShadingContext
         {
             colRange[i] = freeTriangleShadingType.getDecodeForParameter(2 + i);
         }
-        List<ShadedTriangle> list = new ArrayList<ShadedTriangle>();
+        List<ShadedTriangle> list = new ArrayList<>();
         long maxSrcCoord = (long) Math.pow(2, bitsPerCoordinate) - 1;
         long maxSrcColor = (long) Math.pow(2, bitsPerColorComponent) - 1;
         COSStream stream = (COSStream) dict;
 
-        ImageInputStream mciis = new MemoryCacheImageInputStream(stream.getUnfilteredStream());
-        try
+        try (ImageInputStream mciis = new MemoryCacheImageInputStream(stream.createInputStream()))
         {
             byte flag = (byte) 0;
             try
@@ -94,7 +93,8 @@ class Type4ShadingContext extends GouraudShadingContext
                 LOG.error(ex);
             }
 
-            while (true)
+            boolean eof = false;
+            while (!eof)
             {
                 Vertex p0, p1, p2;
                 Point2D[] ps;
@@ -155,13 +155,9 @@ class Type4ShadingContext extends GouraudShadingContext
                 }
                 catch (EOFException ex)
                 {
-                    break;
+                    eof = true;
                 }
             }
-        }
-        finally
-        {
-            mciis.close();
         }
         return list;
     }

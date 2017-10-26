@@ -26,9 +26,13 @@ import org.apache.pdfbox.pdmodel.common.COSArrayList;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationWidget;
 import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceDictionary;
+import org.apache.pdfbox.pdmodel.interactive.annotation.PDAppearanceEntry;
 
 /**
  * A button field represents an interactive control on the screen
@@ -62,7 +66,7 @@ public abstract class PDButton extends PDTerminalField
     public PDButton(PDAcroForm acroForm)
     {
         super(acroForm);
-        dictionary.setItem(COSName.FT, COSName.BTN);
+        getCOSObject().setItem(COSName.FT, COSName.BTN);
     }
     
     /**
@@ -84,7 +88,7 @@ public abstract class PDButton extends PDTerminalField
      */
     public boolean isPushButton()
     {
-        return dictionary.getFlag(COSName.FF, FLAG_PUSHBUTTON);
+        return getCOSObject().getFlag(COSName.FF, FLAG_PUSHBUTTON);
     }
 
     /**
@@ -94,17 +98,17 @@ public abstract class PDButton extends PDTerminalField
      */
     public void setPushButton(boolean pushbutton)
     {
-        dictionary.setFlag(COSName.FF, FLAG_PUSHBUTTON, pushbutton);
+        getCOSObject().setFlag(COSName.FF, FLAG_PUSHBUTTON, pushbutton);
     }
 
     /**
      * Determines if radio button bit is set.
      * 
-     * @return true if type of button field is a push button.
+     * @return true if type of button field is a radio button.
      */
     public boolean isRadioButton()
     {
-        return dictionary.getFlag(COSName.FF, FLAG_RADIO);
+        return getCOSObject().getFlag(COSName.FF, FLAG_RADIO);
     }
 
     /**
@@ -114,11 +118,95 @@ public abstract class PDButton extends PDTerminalField
      */
     public void setRadioButton(boolean radiobutton)
     {
-        dictionary.setFlag(COSName.FF, FLAG_RADIO, radiobutton);
+        getCOSObject().setFlag(COSName.FF, FLAG_RADIO, radiobutton);
     }
     
     /**
-     * This will get the export values.
+     * Returns the selected value. May be empty if NoToggleToOff is set but there is no value
+     * selected.
+     * 
+     * @return A non-null string.
+     */
+    public String getValue()
+    {
+        COSBase value = getInheritableAttribute(COSName.V);
+        if (value instanceof COSName)
+        {
+            return ((COSName)value).getName();
+        }
+        else
+        {
+            return "";
+        }
+    }
+
+    /**
+     * Sets the selected option given its name.
+     * 
+     * @param value Name of option to select
+     * @throws IOException if the value could not be set
+     * @throws IllegalArgumentException if the value is not a valid option.
+     */
+    @Override
+    public void setValue(String value) throws IOException
+    {
+        checkValue(value);
+        
+        // if there are export values/an Opt entry there is a different 
+        // approach to setting the value
+        boolean hasExportValues = getExportValues().size() > 0;
+
+        if (hasExportValues) {
+            updateByOption(value);
+        }
+        else
+        {
+            updateByValue(value);
+        }
+        
+        applyChange();
+    }
+    
+    
+    /**
+     * Returns the default value, if any.
+     *
+     * @return A non-null string.
+     */
+    public String getDefaultValue()
+    {
+        COSBase value = getInheritableAttribute(COSName.DV);
+        if (value instanceof COSName)
+        {
+            return ((COSName)value).getName();
+        }
+        else
+        {
+            return "";
+        }
+    }
+
+    /**
+     * Sets the default value.
+     *
+     * @param value Name of option to select
+     * @throws IllegalArgumentException if the value is not a valid option.
+     */
+    public void setDefaultValue(String value)
+    {
+        checkValue(value);        
+        getCOSObject().setName(COSName.DV, value);
+    }    
+    
+    @Override
+    public String getValueAsString()
+    {
+        return getValue();
+    }    
+    
+    
+    /**
+     * This will get the (optional) export values.
      * 
      * <p>The export values are defined in the field dictionaries /Opt key.</p>
      * 
@@ -131,16 +219,18 @@ public abstract class PDButton extends PDTerminalField
      *  <li>allow radio buttons having the same export value to be handled independently
      *  </li>
      * </ul>
-     * </p>
      * 
-     * @return List containing all possible export values. If there is no Opt entry an empty list will be returned.
+     * @return List containing all possible export values. If there is no /Opt entry an empty list will be returned.
+     * 
+     * @see #getOnValues() 
      */
     public List<String> getExportValues()
     {
         COSBase value = getInheritableAttribute(COSName.OPT);
+        
         if (value instanceof COSString)
         {
-            List<String> array = new ArrayList<String>();
+            List<String> array = new ArrayList<>();
             array.add(((COSString) value).getString());
             return array;
         }
@@ -159,31 +249,173 @@ public abstract class PDButton extends PDTerminalField
      */
     public void setExportValues(List<String> values)
     {
-        COSArray cosValues = null;
+        COSArray cosValues;
         if (values != null && !values.isEmpty())
         {
             cosValues = COSArrayList.convertStringListToCOSStringCOSArray(values);
-            dictionary.setItem(COSName.OPT, cosValues);
+            getCOSObject().setItem(COSName.OPT, cosValues);
         }
         else
         {
-            dictionary.removeItem(COSName.OPT);
+            getCOSObject().removeItem(COSName.OPT);
         }
     }
-    
+
     @Override
     void constructAppearances() throws IOException
     {
-        for (PDAnnotationWidget widget : getWidgets())
+        List<String> exportValues = getExportValues();
+        if (exportValues.size() > 0)
         {
-            PDAppearanceDictionary appearance = widget.getAppearance();
-            if (appearance == null || appearance.getNormalAppearance() == null)
+            // the value is the index value of the option. So we need to get that
+            // and use it to set the value
+            try
             {
-                // TODO: implement appearance generation for radio buttons
-                throw new UnsupportedOperationException("Appearance generation is not implemented yet, see PDFBOX-2849");
+                int optionsIndex = Integer.parseInt(getValue());
+                if (optionsIndex < exportValues.size())
+                {
+                    updateByOption(exportValues.get(optionsIndex));
+                }
+            } catch (NumberFormatException e)
+            {
+                // silently ignore that
+                // and don't update the appearance
             }
+        }
+        else
+        {
+            updateByValue(getValue());
         }
     }  
 
+    /**
+     * Get the values to set individual buttons within a group to the on state.
+     * 
+     * <p>The On value could be an arbitrary string as long as it is within the limitations of
+     * a PDF name object. The Off value shall always be 'Off'. If not set or not part of the normal
+     * appearance keys 'Off' is the default</p>
+     *
+     * @return the potential values setting the check box to the On state. 
+     *         If an empty Set is returned there is no appearance definition.
+     */
+    public Set<String> getOnValues()
+    {
+        // we need a set as the field can appear multiple times
+        Set<String> onValues = new LinkedHashSet<>();
+        
+        if (getExportValues().size() > 0)
+        {
+            onValues.addAll(getExportValues());
+            return onValues;
+        }
+        
+        List<PDAnnotationWidget> widgets = this.getWidgets();
+        for (PDAnnotationWidget widget : widgets)
+        {
+            onValues.add(getOnValueForWidget(widget));
+        }        
+        return onValues;
+    }
+    
+    /*
+     * Get the on value for an individual widget by it's index.
+     */
+    private String getOnValue(int index)
+    {
+        List<PDAnnotationWidget> widgets = this.getWidgets();
+        if (index < widgets.size())
+        {
+            return getOnValueForWidget(widgets.get(index));
+        }
+        return "";
+    }
+ 
+    /*
+     * Get the on value for an individual widget.
+     */
+    private String getOnValueForWidget(PDAnnotationWidget widget)
+    {
+        PDAppearanceDictionary apDictionary = widget.getAppearance();
+        if (apDictionary != null) 
+        {
+            PDAppearanceEntry normalAppearance = apDictionary.getNormalAppearance();
+            if (normalAppearance != null)
+            {
+                Set<COSName> entries = normalAppearance.getSubDictionary().keySet();
+                for (COSName entry : entries)
+                {
+                    if (COSName.Off.compareTo(entry) != 0)
+                    {
+                        return entry.getName();
+                    }
+                }
+            }
+        }
+        return "";
+    }
+    
+    /**
+     * Checks value.
+     *
+     * @param value Name of radio button to select
+     * @throws IllegalArgumentException if the value is not a valid option.
+     */
+    void checkValue(String value) throws IllegalArgumentException
+    {
+        Set<String> onValues = getOnValues();
+        if (COSName.Off.getName().compareTo(value) != 0 && !onValues.contains(value))
+        {
+            throw new IllegalArgumentException("value '" + value
+                    + "' is not a valid option for the field " + getFullyQualifiedName()
+                    + ", valid values are: " + onValues + " and " + COSName.Off.getName());
+        }
+    }
+
+    private void updateByValue(String value)
+    {
+        getCOSObject().setName(COSName.V, value);
+        // update the appearance state (AS)
+        for (PDAnnotationWidget widget : getWidgets())
+        {
+            PDAppearanceEntry appearanceEntry = widget.getAppearance().getNormalAppearance();
+            if (((COSDictionary) appearanceEntry.getCOSObject()).containsKey(value))
+            {
+                widget.getCOSObject().setName(COSName.AS, value);
+            }
+            else
+            {
+                widget.getCOSObject().setItem(COSName.AS, COSName.Off);
+            }
+        }
+    }
+
+    private void updateByOption(String value)
+    {
+        List<PDAnnotationWidget> widgets = getWidgets();
+        List<String> options = getExportValues();
+        
+        if (widgets.size() != options.size())
+        {
+            throw new IllegalArgumentException("The number of options doesn't match the number of widgets");
+        }
+        
+        if (value.equals(COSName.Off.getName()))
+        {
+            updateByValue(value);
+        }
+        else
+        {     
+            // the value is the index of the matching option
+            int optionsIndex = options.indexOf(value);
+            
+            // get the values the options are pointing to as
+            // this might not be numerical
+            // see PDFBOX-3682
+            if (optionsIndex != -1)
+            {
+                updateByValue(getOnValue(optionsIndex));
+            }
+        }
+    }
     
 }

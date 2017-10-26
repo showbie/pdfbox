@@ -56,8 +56,8 @@ public class FDFParser extends COSParser
      */
     public FDFParser(File file) throws IOException
     {
+        super(new RandomAccessFile(file, "r"));
         fileLen = file.length();
-        pdfSource = new RandomAccessFile(file, "r");
         init();
     }
 
@@ -69,9 +69,21 @@ public class FDFParser extends COSParser
      */
     public FDFParser(InputStream input) throws IOException
     {
-        pdfSource = new RandomAccessBuffer(input);
-        fileLen = pdfSource.length();
+        super(new RandomAccessBuffer(input));
+        fileLen = source.length();
         init();
+    }
+
+    /**
+     * Tell if the dictionary is a FDF catalog.
+     *
+     * @param dictionary
+     * @return
+     */
+    @Override
+    protected final boolean isCatalog(COSDictionary dictionary)
+    {
+        return dictionary.containsKey(COSName.FDF);
     }
 
     private void init() throws IOException
@@ -89,7 +101,7 @@ public class FDFParser extends COSParser
                         + " does not contain an integer value, but: '" + eofLookupRangeStr + "'");
             }
         }
-        document = new COSDocument(false);
+        document = new COSDocument();
     }
 
     /**
@@ -101,17 +113,7 @@ public class FDFParser extends COSParser
      */
     private void initialParse() throws IOException
     {
-        COSDictionary trailer = null;
-        // parse startxref
-        long startXRefOffset = getStartxrefOffset();
-        if (startXRefOffset > 0)
-        {
-            trailer = parseXref(startXRefOffset);
-        }
-        else
-        {
-            trailer = rebuildTrailer();
-        }
+        COSDictionary trailer = retrieveTrailer();
     
         COSBase rootObject = parseTrailerValuesDynamically(trailer);
     
@@ -125,8 +127,7 @@ public class FDFParser extends COSParser
     }
 
     /**
-     * This will parse the stream and populate the COSDocument object.  This will close
-     * the stream when it is done parsing.
+     * This will parse the stream and populate the COSDocument object.
      *
      * @throws IOException If there is an error reading from the stream or corrupt data
      * is found.

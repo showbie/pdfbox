@@ -21,23 +21,17 @@
 
 package org.apache.pdfbox.preflight.content;
 
-import static org.apache.pdfbox.preflight.PreflightConstants.ERROR_FONTS_ENCODING_ERROR;
-import static org.apache.pdfbox.preflight.PreflightConstants.ERROR_FONTS_UNKNOWN_FONT_REF;
-import static org.apache.pdfbox.preflight.PreflightConstants.ERROR_SYNTAX_CONTENT_STREAM_INVALID_ARGUMENT;
-import static org.apache.pdfbox.preflight.PreflightConstants.ERROR_SYNTAX_CONTENT_STREAM_UNSUPPORTED_OP;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
-
+import org.apache.pdfbox.contentstream.operator.Operator;
 import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSFloat;
 import org.apache.pdfbox.cos.COSInteger;
 import org.apache.pdfbox.cos.COSString;
 import org.apache.pdfbox.pdmodel.PDPage;
-import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.pattern.PDTilingPattern;
@@ -48,7 +42,12 @@ import org.apache.pdfbox.preflight.ValidationResult.ValidationError;
 import org.apache.pdfbox.preflight.exception.ValidationException;
 import org.apache.pdfbox.preflight.font.container.FontContainer;
 import org.apache.pdfbox.preflight.font.util.GlyphException;
-import org.apache.pdfbox.contentstream.operator.Operator;
+
+
+import static org.apache.pdfbox.preflight.PreflightConstants.ERROR_FONTS_ENCODING_ERROR;
+import static org.apache.pdfbox.preflight.PreflightConstants.ERROR_FONTS_UNKNOWN_FONT_REF;
+import static org.apache.pdfbox.preflight.PreflightConstants.ERROR_SYNTAX_CONTENT_STREAM_INVALID_ARGUMENT;
+import static org.apache.pdfbox.preflight.PreflightConstants.ERROR_SYNTAX_CONTENT_STREAM_UNSUPPORTED_OP;
 
 public class PreflightContentStream extends PreflightStreamEngine
 {
@@ -66,10 +65,9 @@ public class PreflightContentStream extends PreflightStreamEngine
     {
         try
         {
-            PDStream pstream = this.processeedPage.getStream();
-            if (pstream != null)
+            if (processedPage.hasContents())
             {
-                processPage(this.processeedPage);
+                processPage(processedPage);
             }
         }
         catch (ContentStreamException e)
@@ -93,13 +91,14 @@ public class PreflightContentStream extends PreflightStreamEngine
         try
         {
             // workaround for preflight not finding widget annotation parent PDPage
-            if (processeedPage == null)
+            if (processedPage == null)
             {
-                processChildStream(form, new PDPage()); // dummy page, resource lookup may fail
+                // dummy page, resource lookup may fail
+                processChildStream(form, new PDPage()); 
             }
             else
             {
-                processChildStream(form, processeedPage);
+                processChildStream(form, processedPage);
             }
         }
         catch (ContentStreamException e)
@@ -122,7 +121,7 @@ public class PreflightContentStream extends PreflightStreamEngine
     {
         try
         {
-            processChildStream(pattern, processeedPage);
+            processChildStream(pattern, processedPage);
         }
         catch (ContentStreamException e)
         {
@@ -146,8 +145,8 @@ public class PreflightContentStream extends PreflightStreamEngine
          */
         if ("BI".equals(operator.getName()))
         {
-            validateImageFilter(operator);
-            validateImageColorSpace(operator);
+            validateInlineImageFilter(operator);
+            validateInlineImageColorSpace(operator);
         }
 
         checkShowTextOperators(operator, operands);
@@ -155,6 +154,7 @@ public class PreflightContentStream extends PreflightStreamEngine
         validateRenderingIntent(operator, operands);
         checkSetColorSpaceOperators(operator, operands);
         validateNumberOfGraphicStates(operator);
+        validateDefaultColorSpace(operator);
     }
 
     @Override
@@ -164,11 +164,10 @@ public class PreflightContentStream extends PreflightStreamEngine
                 ERROR_SYNTAX_CONTENT_STREAM_UNSUPPORTED_OP);
     }
 
-    /**
-     * Process Text Validation. According to the operator one of the both method will be called.
-     * (validStringDefinition(PDFOperator operator, List<?> arguments) / validStringArray(PDFOperator operator, List<?>
-     * arguments))
-     * 
+   /**
+     * Process Text Validation. Depending on the operator parameter, this will either call
+     * <code>validateStringDefinition</code> or <code>validateStringArray</code>.
+     *
      * @param operator
      * @param arguments
      * @throws IOException
@@ -297,11 +296,11 @@ public class PreflightContentStream extends PreflightStreamEngine
         if (font == null)
         {
             // Unable to decode the Text without Font
-            registerError("Text operator can't be process without Font", ERROR_FONTS_UNKNOWN_FONT_REF);
+            registerError("Text operator can't be processed without a Font", ERROR_FONTS_UNKNOWN_FONT_REF);
             return;
         }
 
-        FontContainer fontContainer = context.getFontContainer(font.getCOSObject());
+        FontContainer<?> fontContainer = context.getFontContainer(font.getCOSObject());
         if (renderingMode == RenderingMode.NEITHER && (fontContainer == null || !fontContainer.isEmbeddedFont()))
         {
             // font not embedded and rendering mode is 3. Valid case and nothing to check
@@ -310,8 +309,14 @@ public class PreflightContentStream extends PreflightStreamEngine
         else if (fontContainer == null)
         {
             // Font Must be embedded if the RenderingMode isn't 3
-            registerError(font.getName() + " is unknown wasn't found by the FontHelperValidator",
-                    ERROR_FONTS_UNKNOWN_FONT_REF);
+            if (font.getName() == null)
+            {
+                registerError("invalid font dictionary", ERROR_FONTS_UNKNOWN_FONT_REF);
+            }
+            else
+            {
+                registerError("font '" + font.getName() + "' is missing", ERROR_FONTS_UNKNOWN_FONT_REF);
+            }
             return;
         }
         else if (!fontContainer.isValid() && !fontContainer.errorsAleadyMerged())

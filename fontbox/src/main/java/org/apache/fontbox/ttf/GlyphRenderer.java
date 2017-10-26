@@ -22,6 +22,7 @@ import org.apache.commons.logging.LogFactory;
 import java.awt.geom.GeneralPath;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * This class provides a glyph to GeneralPath conversion for true type fonts.
@@ -63,13 +64,19 @@ class GlyphRenderer
     private Point[] describe(GlyphDescription gd)
     {
         int endPtIndex = 0;
+        int endPtOfContourIndex = -1;
         Point[] points = new Point[gd.getPointCount()];
         for (int i = 0; i < gd.getPointCount(); i++)
         {
-            boolean endPt = gd.getEndPtOfContours(endPtIndex) == i;
+            if (endPtOfContourIndex == -1)
+            {
+                endPtOfContourIndex = gd.getEndPtOfContours(endPtIndex);
+            }
+            boolean endPt = endPtOfContourIndex == i;
             if (endPt)
             {
                 endPtIndex++;
+                endPtOfContourIndex = -1;
             }
             points[i] = new Point(gd.getXCoordinate(i), gd.getYCoordinate(i),
                     (gd.getFlags(i) & GlyfDescript.ON_CURVE) != 0, endPt);
@@ -94,7 +101,7 @@ class GlyphRenderer
             {
                 Point firstPoint = points[start];
                 Point lastPoint = points[p];
-                List<Point> contour = new ArrayList<Point>();
+                List<Point> contour = new ArrayList<>();
                 for (int q = start; q <= p; ++q)
                 {
                     contour.add(points[q]);
@@ -134,6 +141,7 @@ class GlyphRenderer
                         quadTo(path, pnow, midValue(pnow, contour.get(j + 1)));
                     }
                 }
+                path.closePath();            
                 start = p + 1;
             }
         }
@@ -145,7 +153,7 @@ class GlyphRenderer
         path.moveTo(point.x, point.y);
         if (LOG.isDebugEnabled())
         {
-            LOG.trace("moveTo: " + String.format("%d,%d", point.x, point.y));
+            LOG.trace("moveTo: " + String.format(Locale.US, "%d,%d", point.x, point.y));
         }
     }
 
@@ -154,7 +162,7 @@ class GlyphRenderer
         path.lineTo(point.x, point.y);
         if (LOG.isDebugEnabled())
         {
-            LOG.trace("lineTo: " + String.format("%d,%d", point.x, point.y));
+            LOG.trace("lineTo: " + String.format(Locale.US, "%d,%d", point.x, point.y));
         }
     }
 
@@ -163,7 +171,7 @@ class GlyphRenderer
         path.quadTo(ctrlPoint.x, ctrlPoint.y, point.x, point.y);
         if (LOG.isDebugEnabled())
         {
-            LOG.trace("quadTo: " + String.format("%d,%d %d,%d", ctrlPoint.x, ctrlPoint.y,
+            LOG.trace("quadTo: " + String.format(Locale.US, "%d,%d %d,%d", ctrlPoint.x, ctrlPoint.y,
                     point.x, point.y));
         }
     }
@@ -206,7 +214,7 @@ class GlyphRenderer
         @Override
         public String toString()
         {
-            return String.format("Point(%d,%d,%s,%s)", x, y, onCurve ? "onCurve" : "",
+            return String.format(Locale.US, "Point(%d,%d,%s,%s)", x, y, onCurve ? "onCurve" : "",
                     endOfContour ? "endOfContour" : "");
         }
     }

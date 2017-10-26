@@ -80,7 +80,7 @@ public class FDFJavaScript implements COSObjectable
         }
         else if (base instanceof COSStream)
         {
-            return ((COSStream) base).getString();
+            return ((COSStream) base).toTextString();
         }
         else
         {
@@ -112,7 +112,7 @@ public class FDFJavaScript implements COSObjectable
         }
         else if (base instanceof COSStream)
         {
-            return ((COSStream) base).getString();
+            return ((COSStream) base).toTextString();
         }
         else
         {
@@ -138,7 +138,7 @@ public class FDFJavaScript implements COSObjectable
      */
     public Map<String, PDActionJavaScript> getDoc()
     {
-        Map<String, PDActionJavaScript> map = new LinkedHashMap<String, PDActionJavaScript>();
+        Map<String, PDActionJavaScript> map = new LinkedHashMap<>();
         COSArray array = (COSArray) dictionary.getDictionaryObject(COSName.DOC);
         if (array == null)
         {

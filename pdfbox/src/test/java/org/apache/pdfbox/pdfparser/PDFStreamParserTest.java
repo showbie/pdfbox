@@ -17,11 +17,9 @@ package org.apache.pdfbox.pdfparser;
 
 import java.io.IOException;
 import java.util.List;
-
 import junit.framework.TestCase;
-
 import org.apache.pdfbox.contentstream.operator.Operator;
-import org.apache.pdfbox.io.RandomAccessBuffer;
+
 
 import static org.junit.Assert.assertArrayEquals;
 
@@ -50,6 +48,8 @@ public class PDFStreamParserTest extends TestCase
         testInlineImage2ops("ID\n12345EI  EMC", "12345", "EMC");
         testInlineImage2ops("ID\n12345EI  Q ", "12345", "Q");
         testInlineImage2ops("ID\n12345EI  EMC ", "12345", "EMC");
+
+        testInlineImage2ops("ID\n12345EI \000Q", "12345", "Q");
 
         testInlineImage2ops("ID\n12345EI Q                             ", "12345", "Q");
         testInlineImage2ops("ID\n12345EI EMC                           ", "12345", "EMC");
@@ -116,7 +116,7 @@ public class PDFStreamParserTest extends TestCase
     // parse string and return list of tokens
     private List<Object> parseTokenString(String s) throws IOException
     {
-        PDFStreamParser pdfStreamParser = new PDFStreamParser(new RandomAccessBuffer(s.getBytes()));
+        PDFStreamParser pdfStreamParser = new PDFStreamParser(s.getBytes());
         pdfStreamParser.parse();
         return pdfStreamParser.getTokens();
     }

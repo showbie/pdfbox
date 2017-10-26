@@ -16,21 +16,20 @@
  */
 package org.apache.pdfbox.examples.util;
 
+import java.awt.Rectangle;
+import java.io.File;
+import java.io.IOException;
+
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.text.PDFTextStripperByArea;
 
-import java.awt.Rectangle;
-import java.io.File;
-
 /**
  * This is an example on how to extract text from a specific area on the PDF document.
  *
- * Usage: java org.apache.pdfbox.examples.util.ExtractTextByArea &lt;input-pdf&gt;
- *
  * @author Ben Litchfield
  */
-public class ExtractTextByArea
+public final class ExtractTextByArea
 {
     private ExtractTextByArea()
     {
@@ -43,9 +42,9 @@ public class ExtractTextByArea
      *
      * @param args The command line arguments.
      *
-     * @throws Exception If there is an error parsing the document.
+     * @throws IOException If there is an error parsing the document.
      */
-    public static void main( String[] args ) throws Exception
+    public static void main( String[] args ) throws IOException
     {
         if( args.length != 1 )
         {
@@ -53,10 +52,8 @@ public class ExtractTextByArea
         }
         else
         {
-            PDDocument document = null;
-            try
+            try (PDDocument document = PDDocument.load(new File(args[0])))
             {
-                document = PDDocument.load( new File(args[0]) );
                 PDFTextStripperByArea stripper = new PDFTextStripperByArea();
                 stripper.setSortByPosition( true );
                 Rectangle rect = new Rectangle( 10, 280, 275, 60 );
@@ -66,13 +63,6 @@ public class ExtractTextByArea
                 System.out.println( "Text in the area:" + rect );
                 System.out.println( stripper.getTextForRegion( "class1" ) );
             }
-            finally
-            {
-                if( document != null )
-                {
-                    document.close();
-                }
-            }
         }
     }
 
@@ -81,7 +71,7 @@ public class ExtractTextByArea
      */
     private static void usage()
     {
-        System.err.println( "Usage: java org.apache.pdfbox.examples.util.ExtractTextByArea <input-pdf>" );
+        System.err.println( "Usage: java " + ExtractTextByArea.class.getName() + " <input-pdf>" );
     }
 
 }

@@ -69,7 +69,7 @@ public class Type1CharStringParser
      */
     public List<Object> parse(byte[] bytes, List<byte[]> subrs) throws IOException
     {
-        return parse(bytes, subrs, new ArrayList<Object>());
+        return parse(bytes, subrs, new ArrayList<>());
     }
 
     private List<Object> parse(byte[] bytes, List<byte[]> subrs, List<Object> sequence) throws IOException
@@ -81,9 +81,16 @@ public class Type1CharStringParser
             if (b0 == CALLSUBR)
             {
                 // callsubr command
-                Integer operand=(Integer)sequence.remove(sequence.size()-1);
+                Object obj = sequence.remove(sequence.size() - 1);
+                if (!(obj instanceof Integer))
+                {
+                    LOG.warn("Parameter " + obj + " for CALLSUBR is ignored, integer expected in glyph '"
+                            + glyphName + "' of font " + fontName);
+                    continue;
+                }
+                Integer operand = (Integer) obj;
 
-                if (operand < subrs.size())
+                if (operand >= 0 && operand < subrs.size())
                 {
                     byte[] subrBytes = subrs.get(operand);
                     parse(subrBytes, subrs, sequence);
@@ -92,6 +99,17 @@ public class Type1CharStringParser
                           ((CharStringCommand)lastItem).getKey().getValue()[0] == RETURN)
                     {
                         sequence.remove(sequence.size()-1); // remove "return" command
+                    }
+                }
+                else
+                {
+                    LOG.warn("CALLSUBR is ignored, operand: " + operand
+                            + ", subrs.size(): " + subrs.size() + " in glyph '"
+                            + glyphName + "' of font " + fontName);
+                    // remove all parameters (there can be more than one)
+                    while (sequence.get(sequence.size() - 1) instanceof Integer)
+                    {
+                        sequence.remove(sequence.size() - 1);
                     }
                 }
             }
@@ -104,35 +122,33 @@ public class Type1CharStringParser
                 Integer numArgs = (Integer)sequence.remove(sequence.size()-1);
 
                 // othersubrs 0-3 have their own semantics
-                Stack<Integer> results = new Stack<Integer>();
-                if (othersubrNum == 0)
+                Stack<Integer> results = new Stack<>();
+                switch (othersubrNum)
                 {
-                    results.push(removeInteger(sequence));
-                    results.push(removeInteger(sequence));
-                    sequence.remove(sequence.size() - 1);
-                    // end flex
-                    sequence.add(0);
-                    sequence.add(new CharStringCommand(TWO_BYTE, CALLOTHERSUBR));
-                }
-                else if (othersubrNum == 1)
-                {
-                    // begin flex
-                    sequence.add(1);
-                    sequence.add(new CharStringCommand(TWO_BYTE, CALLOTHERSUBR));
-                }
-                else if (othersubrNum == 3)
-                {
-                    // allows hint replacement
-                    results.push(removeInteger(sequence));
-                }
-                else
-                {
-                    // all remaining othersubrs use this fallback mechanism
-                    for (int i = 0; i < numArgs; i++)
-                    {
-                        Integer arg = removeInteger(sequence);
-                        results.push(arg);
-                    }
+                    case 0:
+                        results.push(removeInteger(sequence));
+                        results.push(removeInteger(sequence));
+                        sequence.remove(sequence.size() - 1);
+                        // end flex
+                        sequence.add(0);
+                        sequence.add(new CharStringCommand(TWO_BYTE, CALLOTHERSUBR));
+                        break;
+                    case 1:
+                        // begin flex
+                        sequence.add(1);
+                        sequence.add(new CharStringCommand(TWO_BYTE, CALLOTHERSUBR));
+                        break;
+                    case 3:
+                        // allows hint replacement
+                        results.push(removeInteger(sequence));
+                        break;
+                    default:
+                        // all remaining othersubrs use this fallback mechanism
+                        for (int i = 0; i < numArgs; i++)
+                        {
+                            results.push(removeInteger(sequence));
+                        }
+                        break;
                 }
 
                 // pop must follow immediately
@@ -140,8 +156,7 @@ public class Type1CharStringParser
                 {
                     input.readByte(); // B0_POP
                     input.readByte(); // B1_POP
-                    Integer val = results.pop();
-                    sequence.add(val);
+                    sequence.add(results.pop());
                 }
 
                 if (results.size() > 0)
@@ -214,12 +229,7 @@ public class Type1CharStringParser
         } 
         else if (b0 == 255)
         {
-            int b1 = input.readUnsignedByte();
-            int b2 = input.readUnsignedByte();
-            int b3 = input.readUnsignedByte();
-            int b4 = input.readUnsignedByte();
-
-            return b1 << 24 | b2 << 16 | b3 << 8 | b4;
+            return input.readInt();
         } 
         else
         {

@@ -29,8 +29,8 @@ import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
-import org.apache.pdfbox.cos.COSInteger;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSStream;
 
@@ -39,7 +39,7 @@ import org.apache.pdfbox.cos.COSStream;
  * monochrome (1 bit per pixel) image data (or an approximation of that data).
  *
  * Requires a JBIG2 plugin for Java Image I/O to be installed. A known working
- * plug-in is <a href="http://code.google.com/p/jbig2-imageio/">jbig2-imageio</a>
+ * plug-in is <a href="https://github.com/levigo/jbig2-imageio">jbig2-imageio</a>
  * which is available under the GPL v3 license.
  *
  * @author Timo Boehme
@@ -56,29 +56,22 @@ final class JBIG2Filter extends Filter
         DecodeResult result = new DecodeResult(new COSDictionary());
         result.getParameters().addAll(parameters);
 
-        COSInteger bits = (COSInteger) parameters.getDictionaryObject(COSName.BITS_PER_COMPONENT);
+        int bits = parameters.getInt(COSName.BITS_PER_COMPONENT, 1);
         COSDictionary params = getDecodeParams(parameters, index);
 
-        COSStream globals = null;
+        InputStream source = encoded;
         if (params != null)
         {
-            globals = (COSStream) params.getDictionaryObject(COSName.JBIG2_GLOBALS);
+            COSBase globals = params.getDictionaryObject(COSName.JBIG2_GLOBALS);
+            if (globals instanceof COSStream)
+            {
+                source = new SequenceInputStream(((COSStream) globals).createInputStream(), encoded);
+            }
         }
 
-        ImageInputStream iis = null;
-        try
+        try (ImageInputStream iis = ImageIO.createImageInputStream(source))
         {
-            if (globals != null)
-            {
-                iis = ImageIO.createImageInputStream(
-                        new SequenceInputStream(globals.getUnfilteredStream(), encoded));
-                reader.setInput(iis);
-            }
-            else
-            {
-                iis = ImageIO.createImageInputStream(encoded);
-                reader.setInput(iis);
-            }
+            reader.setInput(iis);
 
             BufferedImage image;
             try
@@ -93,9 +86,9 @@ final class JBIG2Filter extends Filter
 
             // I am assuming since JBIG2 is always black and white
             // depending on your renderer this might or might be needed
-            if (image.getColorModel().getPixelSize() != bits.intValue())
+            if (image.getColorModel().getPixelSize() != bits)
             {
-                if (bits.intValue() != 1)
+                if (bits != 1)
                 {
                     LOG.warn("Attempting to handle a JBIG2 with more than 1-bit depth");
                 }
@@ -119,10 +112,6 @@ final class JBIG2Filter extends Filter
         }
         finally
         {
-            if (iis != null)
-            {
-                iis.close();
-            }
             reader.dispose();
         }
 

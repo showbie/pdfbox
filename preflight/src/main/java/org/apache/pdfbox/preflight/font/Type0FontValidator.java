@@ -39,7 +39,6 @@ import static org.apache.pdfbox.preflight.PreflightConstants.FONT_DICTIONARY_VAL
 
 import java.io.IOException;
 import java.io.InputStream;
-import org.apache.commons.io.IOUtils;
 import org.apache.fontbox.cmap.CMap;
 import org.apache.fontbox.cmap.CMapParser;
 import org.apache.pdfbox.cos.COSArray;
@@ -48,6 +47,7 @@ import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSDocument;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSStream;
+import org.apache.pdfbox.pdmodel.font.PDCIDFont;
 import org.apache.pdfbox.pdmodel.font.PDCIDFontType0;
 import org.apache.pdfbox.pdmodel.font.PDCIDFontType2;
 import org.apache.pdfbox.pdmodel.font.PDFont;
@@ -133,7 +133,7 @@ public class Type0FontValidator extends FontValidator<Type0Container>
             return;
         }
 
-        FontValidator<? extends FontContainer> cidFontValidator = createDescendantValidator(cidFont);
+        FontValidator<? extends FontContainer<? extends PDCIDFont>> cidFontValidator = createDescendantValidator(cidFont);
         if (cidFontValidator != null)
         {
             this.fontContainer.setDelegateFontContainer(cidFontValidator.getFontContainer());
@@ -141,10 +141,10 @@ public class Type0FontValidator extends FontValidator<Type0Container>
         }
     }
 
-    protected FontValidator<? extends FontContainer> createDescendantValidator(COSDictionary cidFont)
+    protected FontValidator<? extends FontContainer<? extends PDCIDFont>> createDescendantValidator(COSDictionary cidFont)
     {
         String subtype = cidFont.getNameAsString(COSName.SUBTYPE);
-        FontValidator<? extends FontContainer> cidFontValidator = null;
+        FontValidator<? extends FontContainer<? extends PDCIDFont>> cidFontValidator = null;
         if (FONT_DICTIONARY_VALUE_TYPE0.equals(subtype))
         {
             cidFontValidator = createCIDType0FontValidator(cidFont);
@@ -164,7 +164,7 @@ public class Type0FontValidator extends FontValidator<Type0Container>
     /**
      * Create the validation object for CIDType0 Font
      */
-    protected FontValidator<? extends FontContainer> createCIDType0FontValidator(COSDictionary fDict)
+    protected FontValidator<? extends FontContainer<PDCIDFontType0>> createCIDType0FontValidator(COSDictionary fDict)
     {
         try
         {
@@ -184,7 +184,7 @@ public class Type0FontValidator extends FontValidator<Type0Container>
      * @param fDict a CIDType2 font dictionary.
      * @return a CIDType2 tont font validator.
      */
-    protected FontValidator<? extends FontContainer> createCIDType2FontValidator(COSDictionary fDict)
+    protected FontValidator<? extends FontContainer<PDCIDFontType2>> createCIDType2FontValidator(COSDictionary fDict)
     {
         try
         {
@@ -252,15 +252,12 @@ public class Type0FontValidator extends FontValidator<Type0Container>
      */
     private void processCMapAsStream(COSStream aCMap)
     {
-
         COSBase sysinfo = aCMap.getItem(COSName.CIDSYSTEMINFO);
         checkCIDSystemInfo(sysinfo);
 
-        InputStream cmapStream = null;
-        try
+        try (InputStream cmapStream = aCMap.createInputStream())
         {
             // extract information from the CMap stream
-            cmapStream = aCMap.getUnfilteredStream();
             CMap fontboxCMap = new CMapParser().parse(cmapStream);
             int wmValue = fontboxCMap.getWMode();
             String cmnValue = fontboxCMap.getName();
@@ -293,10 +290,6 @@ public class Type0FontValidator extends FontValidator<Type0Container>
         catch (IOException e)
         {
             this.fontContainer.push(new ValidationError(ERROR_FONTS_CID_CMAP_DAMAGED, font.getName() + ": The CMap type is damaged", e));
-        }
-        finally
-        {
-            IOUtils.closeQuietly(cmapStream);
         }
 
         COSDictionary cmapUsed = (COSDictionary) aCMap.getDictionaryObject(COSName

@@ -16,7 +16,11 @@
  */
 package org.apache.pdfbox.pdmodel.interactive.action;
 
+import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
+import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.cos.COSString;
+import org.apache.pdfbox.util.Charsets;
 
 /**
  * This represents a URI action that can be executed in a PDF document.
@@ -51,36 +55,33 @@ public class PDActionURI extends PDAction
     }
 
     /**
-     * This will get the type of action that the actions dictionary describes.
-     * It must be URI for a URI action.
+     * This will get the uniform resource identifier to resolve. It should be encoded in 7-bit
+     * ASCII, but UTF-8 and UTF-16 are supported too.
      *
-     * @return The S entry of the specific URI action dictionary.
-     */
-    public String getS()
-    {
-        return action.getNameAsString("S");
-    }
-
-    /**
-     * This will set the type of action that the actions dictionary describes.
-     * It must be URI for a URI action.
-     *
-     * @param s The URI action.
-     */
-    public void setS(String s)
-    {
-        action.setName("S", s);
-    }
-
-    /**
-     * This will get the uniform resource identifier to resolve, encoded in
-     * 7-bit ASCII.
-     *
-     * @return The URI entry of the specific URI action dictionary.
+     * @return The URI entry of the specific URI action dictionary or null if there isn't any.
      */
     public String getURI()
     {
-        return action.getString("URI");
+        COSBase base = action.getDictionaryObject(COSName.URI);
+        if (base instanceof COSString)
+        {
+            byte[] bytes = ((COSString) base).getBytes();
+            if (bytes.length >= 2)
+            {
+                // UTF-16 (BE)
+                if ((bytes[0] & 0xFF) == 0xFE && (bytes[1] & 0xFF) == 0xFF)
+                {
+                    return action.getString(COSName.URI);
+                }
+                // UTF-16 (LE)
+                if ((bytes[0] & 0xFF) == 0xFF && (bytes[1] & 0xFF) == 0xFE)
+                {
+                    return action.getString(COSName.URI);
+                }
+            }
+            return new String(bytes, Charsets.UTF_8);
+        }
+        return null;
     }
 
     /**
@@ -91,7 +92,7 @@ public class PDActionURI extends PDAction
      */
     public void setURI(String uri)
     {
-        action.setString("URI", uri);
+        action.setString(COSName.URI, uri);
     }
 
     /**

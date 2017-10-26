@@ -36,7 +36,7 @@ import org.apache.pdfbox.tools.imageio.ImageIOUtil;
  *
  * @author Ben Litchfield
  */
-public class PDFToImage
+public final class PDFToImage
 {
     private static final String PASSWORD = "-password";
     private static final String START_PAGE = "-startPage";
@@ -95,84 +95,79 @@ public class PDFToImage
         }
         for( int i = 0; i < args.length; i++ )
         {
-            if( args[i].equals( PASSWORD ) )
+            switch (args[i])
             {
-                i++;
-                if( i >= args.length )
-                {
-                    usage();
-                }
-                password = args[i];
-            }
-            else if( args[i].equals( START_PAGE ) )
-            {
-                i++;
-                if( i >= args.length )
-                {
-                    usage();
-                }
-                startPage = Integer.parseInt( args[i] );
-            }
-            else if( args[i].equals( END_PAGE ) )
-            {
-                i++;
-                if( i >= args.length )
-                {
-                    usage();
-                }
-                endPage = Integer.parseInt( args[i] );
-            }
-            else if( args[i].equals( PAGE ) )
-            {
-                i++;
-                if( i >= args.length )
-                {
-                    usage();
-                }
-                startPage = Integer.parseInt( args[i] );
-                endPage = Integer.parseInt( args[i] );
-            }
-            else if( args[i].equals(IMAGE_TYPE) || args[i].equals(FORMAT) )
-            {
-                i++;
-                imageFormat = args[i];
-            }
-            else if( args[i].equals( OUTPUT_PREFIX ) || args[i].equals( PREFIX ) )
-            {
-                i++;
-                outputPrefix = args[i];
-            }
-            else if( args[i].equals( COLOR ) )
-            {
-                i++;
-                color = args[i];
-            }
-            else if( args[i].equals( RESOLUTION ) || args[i].equals( DPI ) )
-            {
-                i++;
-                dpi = Integer.parseInt(args[i]);
-            }
-            else if( args[i].equals( CROPBOX ) )
-            {
-                i++;
-                cropBoxLowerLeftX = Float.valueOf(args[i]);
-                i++;
-                cropBoxLowerLeftY = Float.valueOf(args[i]);
-                i++;
-                cropBoxUpperRightX = Float.valueOf(args[i]);
-                i++;
-                cropBoxUpperRightY = Float.valueOf(args[i]);
-            }
-            else if( args[i].equals( TIME ) )
-            {
-                showTime = true;
-            }
-            else
-            {
-                if( pdfFile == null )
-                {
-                    pdfFile = args[i];
-                }
+                case PASSWORD:
+                    i++;
+                    if (i >= args.length)
+                    {
+                        usage();
+                    }
+                    password = args[i];
+                    break;
+                case START_PAGE:
+                    i++;
+                    if (i >= args.length)
+                    {
+                        usage();
+                    }
+                    startPage = Integer.parseInt(args[i]);
+                    break;
+                case END_PAGE:
+                    i++;
+                    if (i >= args.length)
+                    {
+                        usage();
+                    }
+                    endPage = Integer.parseInt(args[i]);
+                    break;
+                case PAGE:
+                    i++;
+                    if (i >= args.length)
+                    {
+                        usage();
+                    }
+                    startPage = Integer.parseInt(args[i]);
+                    endPage = Integer.parseInt(args[i]);
+                    break;
+                case IMAGE_TYPE:
+                case FORMAT:
+                    i++;
+                    imageFormat = args[i];
+                    break;
+                case OUTPUT_PREFIX:
+                case PREFIX:
+                    i++;
+                    outputPrefix = args[i];
+                    break;
+                case COLOR:
+                    i++;
+                    color = args[i];
+                    break;
+                case RESOLUTION:
+                case DPI:
+                    i++;
+                    dpi = Integer.parseInt(args[i]);
+                    break;
+                case CROPBOX:
+                    i++;
+                    cropBoxLowerLeftX = Float.valueOf(args[i]);
+                    i++;
+                    cropBoxLowerLeftY = Float.valueOf(args[i]);
+                    i++;
+                    cropBoxUpperRightX = Float.valueOf(args[i]);
+                    i++;
+                    cropBoxUpperRightY = Float.valueOf(args[i]);
+                    break;
+                case TIME:
+                    showTime = true;
+                    break;
+                default:
+                    if (pdfFile == null)
+                    {
+                        pdfFile = args[i];
+                    }
+                    break;
             }
         }
         if( pdfFile == null )
@@ -186,11 +181,8 @@ public class PDFToImage
                 outputPrefix = pdfFile.substring( 0, pdfFile.lastIndexOf( '.' ));
             }
 
-            PDDocument document = null;
-            try
+            try (PDDocument document = PDDocument.load(new File(pdfFile), password))
             {
-                document = PDDocument.load(new File(pdfFile), password);
-
                 ImageType imageType = null;
                 if ("bilevel".equalsIgnoreCase(color))
                 {
@@ -255,13 +247,6 @@ public class PDFToImage
                     System.exit(1);
                 }
             }
-            finally
-            {
-                if( document != null )
-                {
-                    document.close();
-                }
-            }
         }
     }
 
@@ -270,19 +255,21 @@ public class PDFToImage
      */
     private static void usage()
     {
-        System.err.println( "Usage: java -jar pdfbox-app-x.y.z.jar PDFToImage [OPTIONS] <PDF file>\n" +
-            "  -password  <password>          Password to decrypt document\n" +
-            "  -format <string>               Image format: " + getImageFormats() + "\n" +
-            "  -prefix <string>               Filename prefix for image files\n" +
-            "  -page <number>                 The only page to extract (1-based)\n" +
-            "  -startPage <number>            The first page to start extraction (1-based)\n" +
-            "  -endPage <number>              The last page to extract(inclusive)\n" +
-            "  -color <string>                The color depth (valid: bilevel, indexed, gray, rgb, rgba)\n" +
-            "  -dpi <number>                  The DPI of the output image\n" +
-            "  -cropbox <number> <number> <number> <number> The page area to export\n" +
-            "  -time                          Prints timing information to stdout\n" +
-            "  <PDF file>                     The PDF document to use\n"
-            );
+        String message = "Usage: java -jar pdfbox-app-x.y.z.jar PDFToImage [options] <inputfile>\n"
+            + "\nOptions:\n"
+            + "  -password  <password>            : Password to decrypt document\n"
+            + "  -format <string>                 : Image format: " + getImageFormats() + "\n"
+            + "  -prefix <string>                 : Filename prefix for image files\n"
+            + "  -page <number>                   : The only page to extract (1-based)\n"
+            + "  -startPage <int>                 : The first page to start extraction (1-based)\n"
+            + "  -endPage <int>                   : The last page to extract(inclusive)\n"
+            + "  -color <int>                     : The color depth (valid: bilevel, gray, rgb, rgba)\n"
+            + "  -dpi <int>                       : The DPI of the output image\n"
+            + "  -cropbox <int> <int> <int> <int> : The page area to export\n"
+            + "  -time                            : Prints timing information to stdout\n"
+            + "  <inputfile>                      : The PDF document to use\n";
+        
+        System.err.println(message);
         System.exit( 1 );
     }
 

@@ -16,6 +16,7 @@
  */
 package org.apache.pdfbox.pdmodel.graphics.color;
 
+import java.awt.Color;
 import java.awt.color.ColorSpace;
 import java.util.Arrays;
 import org.apache.commons.logging.Log;
@@ -26,13 +27,11 @@ import org.apache.pdfbox.cos.COSFloat;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSStream;
 
-import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.common.COSArrayList;
 import org.apache.pdfbox.pdmodel.common.PDRange;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 
-import java.awt.Color;
 import java.awt.color.CMMException;
 import java.awt.color.ICC_ColorSpace;
 import java.awt.color.ICC_Profile;
@@ -63,6 +62,7 @@ public final class PDICCBased extends PDCIEBasedColorSpace
     private PDColorSpace alternateColorSpace;
     private ICC_ColorSpace awtColorSpace;
     private PDColor initialColor;
+    private boolean isRGB = false;
 
     /**
      * Creates a new ICC color space with an empty stream.
@@ -80,10 +80,19 @@ public final class PDICCBased extends PDCIEBasedColorSpace
      * Creates a new ICC color space using the PDF array.
      *
      * @param iccArray the ICC stream object
-     * @throws java.io.IOException if there is an error reading the ICC profile.
+     * @throws IOException if there is an error reading the ICC profile or if the parameter
+     * is invalid.
      */
     public PDICCBased(COSArray iccArray) throws IOException
     {
+        if (iccArray.size() < 2)
+        {
+            throw new IOException("ICCBased colorspace array must have two elements");
+        }
+        if (!(iccArray.getObject(1) instanceof COSStream))
+        {
+            throw new IOException("ICCBased colorspace array must have a stream as second element");
+        }
         array = iccArray;
         stream = new PDStream((COSStream) iccArray.getObject(1));
         loadICCProfile();
@@ -109,57 +118,64 @@ public final class PDICCBased extends PDCIEBasedColorSpace
      */
     private void loadICCProfile() throws IOException
     {
-        InputStream input = null;
-        try
+        try (InputStream input = this.stream.createInputStream())
         {
-            input = this.stream.createInputStream();
-
             // if the embedded profile is sRGB then we can use Java's built-in profile, which
             // results in a large performance gain as it's our native color space, see PDFBOX-2587
-            ICC_Profile profile = ICC_Profile.getInstance(input);
-            if (is_sRGB(profile))
+            ICC_Profile profile;
+            synchronized (LOG)
             {
-                awtColorSpace = (ICC_ColorSpace)ColorSpace.getInstance(ColorSpace.CS_sRGB);
-                iccProfile = awtColorSpace.getProfile();
-            }
-            else
-            {
-                awtColorSpace = new ICC_ColorSpace(profile);
-                iccProfile = profile;
-            }
+                profile = ICC_Profile.getInstance(input);
+                if (is_sRGB(profile))
+                {
+                    isRGB = true;
+                    awtColorSpace = (ICC_ColorSpace) ColorSpace.getInstance(ColorSpace.CS_sRGB);
+                    iccProfile = awtColorSpace.getProfile();
+                }
+                else
+                {
+                    awtColorSpace = new ICC_ColorSpace(profile);
+                    iccProfile = profile;
+                }
 
-            // set initial colour
-            float[] initial = new float[getNumberOfComponents()];
-            for (int c = 0; c < getNumberOfComponents(); c++)
-            {
-                initial[c] = Math.max(0, getRangeForComponent(c).getMin());
-            }
-            initialColor = new PDColor(initial, this);
+                // set initial colour
+                float[] initial = new float[getNumberOfComponents()];
+                for (int c = 0; c < getNumberOfComponents(); c++)
+                {
+                    initial[c] = Math.max(0, getRangeForComponent(c).getMin());
+                }
+                initialColor = new PDColor(initial, this);
 
-            // create a color in order to trigger a ProfileDataException
-            // or CMMException due to invalid profiles, see PDFBOX-1295 and PDFBOX-1740
-            new Color(awtColorSpace, new float[getNumberOfComponents()], 1f);
+                // do things that trigger a ProfileDataException
+                // or CMMException due to invalid profiles, see PDFBOX-1295 and PDFBOX-1740
+                // or ArrayIndexOutOfBoundsException, see PDFBOX-3610
+                awtColorSpace.toRGB(new float[awtColorSpace.getNumComponents()]);
+                // this one triggers an exception for PDFBOX-3549 with KCMS
+                new Color(awtColorSpace, new float[getNumberOfComponents()], 1f);
+            }
         }
         catch (RuntimeException e)
         {
             if (e instanceof ProfileDataException ||
                 e instanceof CMMException ||
-                e instanceof IllegalArgumentException)
+                e instanceof IllegalArgumentException ||
+                e instanceof ArrayIndexOutOfBoundsException)
             {
                 // fall back to alternateColorSpace color space
                 awtColorSpace = null;
                 alternateColorSpace = getAlternateColorSpace();
-                LOG.error("Can't read embedded ICC profile (" + e.getLocalizedMessage() + "), using alternate color space: " + alternateColorSpace.getName());
+                if (alternateColorSpace.equals(PDDeviceRGB.INSTANCE))
+                {
+                    isRGB = true;
+                }
+                LOG.warn("Can't read embedded ICC profile (" + e.getLocalizedMessage() + 
+                         "), using alternate color space: " + alternateColorSpace.getName());
                 initialColor = alternateColorSpace.getInitialColor();
             }
             else
             {
                 throw e;
             }
-        }
-        finally
-        {
-            IOUtils.closeQuietly(input);
         }
     }
 
@@ -177,6 +193,10 @@ public final class PDICCBased extends PDCIEBasedColorSpace
     @Override
     public float[] toRGB(float[] value) throws IOException
     {
+        if (isRGB)
+        {
+            return value;
+        }
         if (awtColorSpace != null)
         {
             // WARNING: toRGB is very slow when used with LUT-based ICC profiles
@@ -206,7 +226,7 @@ public final class PDICCBased extends PDCIEBasedColorSpace
     {
         if (numberOfComponents < 0)
         {
-            numberOfComponents = stream.getStream().getInt(COSName.N);
+            numberOfComponents = stream.getCOSObject().getInt(COSName.N);
         }
         return numberOfComponents;
     }
@@ -245,28 +265,26 @@ public final class PDICCBased extends PDCIEBasedColorSpace
      */
     public PDColorSpace getAlternateColorSpace() throws IOException
     {
-        COSBase alternate = stream.getStream().getDictionaryObject(COSName.ALTERNATE);
+        COSBase alternate = stream.getCOSObject().getDictionaryObject(COSName.ALTERNATE);
         COSArray alternateArray;
         if(alternate == null)
         {
             alternateArray = new COSArray();
             int numComponents = getNumberOfComponents();
             COSName csName;
-            if(numComponents == 1)
+            switch (numComponents)
             {
-                csName = COSName.DEVICEGRAY;
-            }
-            else if(numComponents == 3)
-            {
-                csName = COSName.DEVICERGB;
-            }
-            else if(numComponents == 4)
-            {
-                csName = COSName.DEVICECMYK;
-            }
-            else
-            {
-                throw new IOException("Unknown color space number of components:" + numComponents);
+                case 1:
+                    csName = COSName.DEVICEGRAY;
+                    break;
+                case 3:
+                    csName = COSName.DEVICERGB;
+                    break;
+                case 4:
+                    csName = COSName.DEVICECMYK;
+                    break;
+                default:
+                    throw new IOException("Unknown color space number of components:" + numComponents);
             }
             alternateArray.add(csName);
         }
@@ -299,7 +317,7 @@ public final class PDICCBased extends PDCIEBasedColorSpace
      */
     public PDRange getRangeForComponent(int n)
     {
-        COSArray rangeArray = (COSArray) stream.getStream().getDictionaryObject(COSName.RANGE);
+        COSArray rangeArray = (COSArray) stream.getCOSObject().getDictionaryObject(COSName.RANGE);
         if (rangeArray == null || rangeArray.size() < getNumberOfComponents() * 2)
         {
             return new PDRange(); // 0..1
@@ -313,7 +331,7 @@ public final class PDICCBased extends PDCIEBasedColorSpace
      */
     public COSStream getMetadata()
     {
-        return (COSStream)stream.getStream().getDictionaryObject(COSName.METADATA);
+        return (COSStream)stream.getCOSObject().getDictionaryObject(COSName.METADATA);
     }
 
     /**
@@ -327,26 +345,19 @@ public final class PDICCBased extends PDCIEBasedColorSpace
         {
             return iccProfile.getColorSpaceType();
         }
-        else
+
+        // if the ICC Profile could not be read
+        switch (alternateColorSpace.getNumberOfComponents())
         {
-            // if the ICC Profile could not be read
-            if (alternateColorSpace.getNumberOfComponents() == 1)
-            {
+            case 1:
                 return ICC_ColorSpace.TYPE_GRAY;
-            }
-            else if (alternateColorSpace.getNumberOfComponents() == 3)
-            {
+            case 3:
                 return ICC_ColorSpace.TYPE_RGB;
-            }
-            else if (alternateColorSpace.getNumberOfComponents() == 4)
-            {
+            case 4:
                 return ICC_ColorSpace.TYPE_CMYK;
-            }
-            else
-            {
+            default:
                 // should not happen as all ICC color spaces in PDF must have 1,3, or 4 components
                 return -1;
-            }
         }
     }
 
@@ -359,22 +370,22 @@ public final class PDICCBased extends PDCIEBasedColorSpace
     public void setNumberOfComponents(int n)
     {
         numberOfComponents = n;
-        stream.getStream().setInt(COSName.N, n);
+        stream.getCOSObject().setInt(COSName.N, n);
     }
 
     /**
      * Sets the list of alternateColorSpace color spaces.
-     * This should be a list of PDColorSpace objects.
+     *
      * @param list the list of color space objects
      */
-    public void setAlternateColorSpaces(List list)
+    public void setAlternateColorSpaces(List<PDColorSpace> list)
     {
         COSArray altArray = null;
         if(list != null)
         {
             altArray = COSArrayList.converterToCOSArray(list);
         }
-        stream.getStream().setItem(COSName.ALTERNATE, altArray);
+        stream.getCOSObject().setItem(COSName.ALTERNATE, altArray);
     }
 
     /**
@@ -384,11 +395,11 @@ public final class PDICCBased extends PDCIEBasedColorSpace
      */
     public void setRangeForComponent(PDRange range, int n)
     {
-        COSArray rangeArray = (COSArray) stream.getStream().getDictionaryObject(COSName.RANGE);
+        COSArray rangeArray = (COSArray) stream.getCOSObject().getDictionaryObject(COSName.RANGE);
         if (rangeArray == null)
         {
             rangeArray = new COSArray();
-            stream.getStream().setItem(COSName.RANGE, rangeArray);
+            stream.getCOSObject().setItem(COSName.RANGE, rangeArray);
         }
         // extend range array with default values if needed
         while (rangeArray.size() < (n + 1) * 2)
@@ -406,7 +417,7 @@ public final class PDICCBased extends PDCIEBasedColorSpace
      */
     public void setMetadata(COSStream metadata)
     {
-        stream.getStream().setItem(COSName.METADATA, metadata);
+        stream.getCOSObject().setItem(COSName.METADATA, metadata);
     }
 
     @Override

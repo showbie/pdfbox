@@ -159,12 +159,12 @@ public class PDStructureElement extends PDStructureNode
     /**
      * Returns the attributes together with their revision numbers (A).
      * 
-     * @return the attributes
+     * @return the attributes as a list, never null.
      */
     public Revisions<PDAttributeObject> getAttributes()
     {
         Revisions<PDAttributeObject> attributes =
-            new Revisions<PDAttributeObject>();
+            new Revisions<>();
         COSBase a = this.getCOSObject().getDictionaryObject(COSName.A);
         if (a instanceof COSArray)
         {
@@ -326,12 +326,12 @@ public class PDStructureElement extends PDStructureNode
     /**
      * Returns the class names together with their revision numbers (C).
      * 
-     * @return the class names
+     * @return the class names as a list, never null.
      */
     public Revisions<String> getClassNames()
     {
         COSName key = COSName.C;
-        Revisions<String> classNames = new Revisions<String>();
+        Revisions<String> classNames = new Revisions<>();
         COSBase c = this.getCOSObject().getDictionaryObject(key);
         if (c instanceof COSName)
         {

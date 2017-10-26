@@ -55,7 +55,7 @@ public abstract class PDFunction implements COSObjectable
         if (function instanceof COSStream)
         {
             functionStream = new PDStream( (COSStream)function );
-            functionStream.getStream().setItem( COSName.TYPE, COSName.FUNCTION );
+            functionStream.getCOSObject().setItem( COSName.TYPE, COSName.FUNCTION );
         }
         else if (function instanceof COSDictionary)
         {
@@ -86,7 +86,7 @@ public abstract class PDFunction implements COSObjectable
     {
         if (functionStream != null)
         {
-            return functionStream.getStream();
+            return functionStream.getCOSObject();
         }
         else 
         {
@@ -117,35 +117,32 @@ public abstract class PDFunction implements COSObjectable
         {
             return new PDFunctionTypeIdentity(null);
         }
-
-        PDFunction retval = null;
-        if( function instanceof COSObject )
+        
+        COSBase base = function;
+        if (function instanceof COSObject)
         {
-            function = ((COSObject)function).getObject();
+            base = ((COSObject) function).getObject();
         }
-        COSDictionary functionDictionary = (COSDictionary)function;
-        int functionType = functionDictionary.getInt( COSName.FUNCTION_TYPE );
-        if( functionType == 0 )
+        if (!(base instanceof COSDictionary))
         {
-            retval = new PDFunctionType0(functionDictionary);
+            throw new IOException("Error: Function must be a Dictionary, but is " +
+                    base.getClass().getSimpleName());
         }
-        else if( functionType == 2 )
+        COSDictionary functionDictionary = (COSDictionary) base;
+        int functionType = functionDictionary.getInt(COSName.FUNCTION_TYPE);
+        switch (functionType)
         {
-            retval = new PDFunctionType2(functionDictionary);
+            case 0:
+                return new PDFunctionType0(functionDictionary);
+            case 2:
+                return new PDFunctionType2(functionDictionary);
+            case 3:
+                return new PDFunctionType3(functionDictionary);
+            case 4:
+                return new PDFunctionType4(functionDictionary);
+            default:
+                throw new IOException("Error: Unknown function type " + functionType);
         }
-        else if( functionType == 3 )
-        {
-            retval = new PDFunctionType3(functionDictionary);
-        }
-        else if( functionType == 4 )
-        {
-            retval = new PDFunctionType4(functionDictionary);
-        }
-        else
-        {
-            throw new IOException( "Error: Unknown function type " + functionType );
-        }
-        return retval;
     }
 
     /**
@@ -153,9 +150,9 @@ public abstract class PDFunction implements COSObjectable
      * have a range specified.  A range for output parameters
      * is optional so this may return zero for a function
      * that does have output parameters, this will simply return the
-     * number that have the rnage specified.
+     * number that have the range specified.
      *
-     * @return The number of input parameters that have a range
+     * @return The number of output parameters that have a range
      * specified.
      */
     public int getNumberOfOutputParameters()
@@ -240,6 +237,7 @@ public abstract class PDFunction implements COSObjectable
     /**
      * @deprecated Replaced by {@link #eval(float[] input)}
      */
+    @Deprecated
     public COSArray eval(COSArray input) throws IOException
     {
         float[] outputValues = eval(input.toFloatArray());

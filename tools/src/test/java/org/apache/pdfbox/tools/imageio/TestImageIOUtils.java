@@ -18,6 +18,7 @@ package org.apache.pdfbox.tools.imageio;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.File;
@@ -38,6 +39,7 @@ import junit.framework.TestCase;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
@@ -45,6 +47,8 @@ import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
+import org.apache.pdfbox.util.filetypedetector.FileType;
+import org.apache.pdfbox.util.filetypedetector.FileTypeDetector;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -81,6 +85,11 @@ public class TestImageIOUtils extends TestCase
                     {
                         suffix = "JPEG2000";
                     }
+                    if ("jb2".equals(suffix))
+                    {
+                        // jbig2 usually not available
+                        suffix = "PNG";
+                    }
                     boolean writeOK = ImageIOUtil.writeImage(imageObject.getImage(), suffix,
                             new ByteArrayOutputStream());
                     assertTrue(writeOK);
@@ -116,35 +125,41 @@ public class TestImageIOUtils extends TestCase
             // testing PNG
             writeImage(document, imageType, outDir + file.getName() + "-", ImageType.RGB, dpi);
             checkResolution(outDir + file.getName() + "-1." + imageType, (int) dpi);
+            checkFileTypeByContent(outDir + file.getName() + "-1." + imageType, FileType.PNG);
 
             // testing JPG/JPEG
             imageType = "jpg";
             writeImage(document, imageType, outDir + file.getName() + "-", ImageType.RGB, dpi);
             checkResolution(outDir + file.getName() + "-1." + imageType, (int) dpi);
+            checkFileTypeByContent(outDir + file.getName() + "-1." + imageType, FileType.JPEG);
 
             // testing BMP
             imageType = "bmp";
             writeImage(document, imageType, outDir + file.getName() + "-", ImageType.RGB, dpi);
             checkResolution(outDir + file.getName() + "-1." + imageType, (int) dpi);
+            checkFileTypeByContent(outDir + file.getName() + "-1." + imageType, FileType.BMP);
 
             // testing GIF
             imageType = "gif";
             writeImage(document, imageType, outDir + file.getName() + "-", ImageType.RGB, dpi);
-            // no META data posible for GIF, thus no test
+            // no META data posible for GIF, thus no dpi test
+            checkFileTypeByContent(outDir + file.getName() + "-1." + imageType, FileType.GIF);
 
             // testing WBMP
             imageType = "wbmp";
             writeImage(document, imageType, outDir + file.getName() + "-", ImageType.BINARY, dpi);
-            // no META data posible for WBMP, thus no test
+            // no META data posible for WBMP, thus no dpi test
 
             // testing TIFF
             imageType = "tif";
             writeImage(document, imageType, outDir + file.getName() + "-bw-", ImageType.BINARY, dpi);
             checkResolution(outDir + file.getName() + "-bw-1." + imageType, (int) dpi);
             checkTiffCompression(outDir + file.getName() + "-bw-1." + imageType, "CCITT T.6");
+            checkFileTypeByContent(outDir + file.getName() + "-bw-1." + imageType, FileType.TIFF);
             writeImage(document, imageType, outDir + file.getName() + "-co-", ImageType.RGB, dpi);
             checkResolution(outDir + file.getName() + "-co-1." + imageType, (int) dpi);
             checkTiffCompression(outDir + file.getName() + "-co-1." + imageType, "LZW");
+            checkFileTypeByContent(outDir + file.getName() + "-co-1." + imageType, FileType.TIFF);
         }
         finally
         {
@@ -207,7 +222,7 @@ public class TestImageIOUtils extends TestCase
     private void checkNotBlank(String filename, BufferedImage newImage)
     {
         // http://stackoverflow.com/a/5253698/535646
-        Set<Integer> colors = new HashSet<Integer>();
+        Set<Integer> colors = new HashSet<>();
         int w = newImage.getWidth();
         int h = newImage.getHeight();
         for (int x = 0; x < w; x++)
@@ -297,30 +312,30 @@ public class TestImageIOUtils extends TestCase
         Iterator readers = ImageIO.getImageReadersBySuffix(suffix);
         assertTrue("No image reader found for suffix " + suffix, readers.hasNext());
         ImageReader reader = (ImageReader) readers.next();
-        ImageInputStream iis = ImageIO.createImageInputStream(new File(filename));
-        assertNotNull("No ImageInputStream created for file " + filename, iis);
-        reader.setInput(iis);
-        IIOMetadata imageMetadata = reader.getImageMetadata(0);
-        Element root = (Element) imageMetadata.getAsTree(STANDARD_METADATA_FORMAT);
-        NodeList dimensionNodes = root.getElementsByTagName("Dimension");
-        assertTrue("No resolution found in image file " + filename, dimensionNodes.getLength() > 0);
-        Element dimensionElement = (Element) dimensionNodes.item(0);
+        try (ImageInputStream iis = ImageIO.createImageInputStream(new File(filename)))
+        {
+            assertNotNull("No ImageInputStream created for file " + filename, iis);
+            reader.setInput(iis);
+            IIOMetadata imageMetadata = reader.getImageMetadata(0);
+            Element root = (Element) imageMetadata.getAsTree(STANDARD_METADATA_FORMAT);
+            NodeList dimensionNodes = root.getElementsByTagName("Dimension");
+            assertTrue("No resolution found in image file " + filename, dimensionNodes.getLength() > 0);
+            Element dimensionElement = (Element) dimensionNodes.item(0);
 
-        NodeList pixelSizeNodes = dimensionElement.getElementsByTagName("HorizontalPixelSize");
-        assertTrue("No X resolution found in image file " + filename, pixelSizeNodes.getLength() > 0);
-        Node pixelSizeNode = pixelSizeNodes.item(0);
-        String val = pixelSizeNode.getAttributes().getNamedItem("value").getNodeValue();
-        int actualResolution = (int) Math.round(25.4 / Double.parseDouble(val));
-        assertEquals("X resolution doesn't match in image file " + filename, expectedResolution, actualResolution);
+            NodeList pixelSizeNodes = dimensionElement.getElementsByTagName("HorizontalPixelSize");
+            assertTrue("No X resolution found in image file " + filename, pixelSizeNodes.getLength() > 0);
+            Node pixelSizeNode = pixelSizeNodes.item(0);
+            String val = pixelSizeNode.getAttributes().getNamedItem("value").getNodeValue();
+            int actualResolution = (int) Math.round(25.4 / Double.parseDouble(val));
+            assertEquals("X resolution doesn't match in image file " + filename, expectedResolution, actualResolution);
 
-        pixelSizeNodes = dimensionElement.getElementsByTagName("VerticalPixelSize");
-        assertTrue("No Y resolution found in image file " + filename, pixelSizeNodes.getLength() > 0);
-        pixelSizeNode = pixelSizeNodes.item(0);
-        val = pixelSizeNode.getAttributes().getNamedItem("value").getNodeValue();
-        actualResolution = (int) Math.round(25.4 / Double.parseDouble(val));
-        assertEquals("Y resolution doesn't match", expectedResolution, actualResolution);
-
-        iis.close();
+            pixelSizeNodes = dimensionElement.getElementsByTagName("VerticalPixelSize");
+            assertTrue("No Y resolution found in image file " + filename, pixelSizeNodes.getLength() > 0);
+            pixelSizeNode = pixelSizeNodes.item(0);
+            val = pixelSizeNode.getAttributes().getNamedItem("value").getNodeValue();
+            actualResolution = (int) Math.round(25.4 / Double.parseDouble(val));
+            assertEquals("Y resolution doesn't match", expectedResolution, actualResolution);
+        }
         reader.dispose();
     }
 
@@ -338,18 +353,19 @@ public class TestImageIOUtils extends TestCase
         // BMP format explained here:
         // http://www.javaworld.com/article/2077561/learn-java/java-tip-60--saving-bitmap-files-in-java.html
         // we skip 38 bytes and then read two 4 byte-integers and reverse the bytes
-        DataInputStream dis = new DataInputStream(new FileInputStream(new File(filename)));
-        int skipped = dis.skipBytes(38);
-        assertEquals("Can't skip 38 bytes in image file " + filename, 38, skipped);
-        int pixelsPerMeter = Integer.reverseBytes(dis.readInt());
-        int actualResolution = (int) Math.round(pixelsPerMeter / 100.0 * 2.54);
-        assertEquals("X resolution doesn't match in image file " + filename,
-                expectedResolution, actualResolution);
-        pixelsPerMeter = Integer.reverseBytes(dis.readInt());
-        actualResolution = (int) Math.round(pixelsPerMeter / 100.0 * 2.54);
-        assertEquals("Y resolution doesn't match in image file " + filename,
-                expectedResolution, actualResolution);
-        dis.close();
+        try (DataInputStream dis = new DataInputStream(new FileInputStream(new File(filename))))
+        {
+            int skipped = dis.skipBytes(38);
+            assertEquals("Can't skip 38 bytes in image file " + filename, 38, skipped);
+            int pixelsPerMeter = Integer.reverseBytes(dis.readInt());
+            int actualResolution = (int) Math.round(pixelsPerMeter / 100.0 * 2.54);
+            assertEquals("X resolution doesn't match in image file " + filename,
+                    expectedResolution, actualResolution);
+            pixelsPerMeter = Integer.reverseBytes(dis.readInt());
+            actualResolution = (int) Math.round(pixelsPerMeter / 100.0 * 2.54);
+            assertEquals("Y resolution doesn't match in image file " + filename,
+                    expectedResolution, actualResolution);
+        }
     }
 
     /**
@@ -364,16 +380,24 @@ public class TestImageIOUtils extends TestCase
     {
         Iterator readers = ImageIO.getImageReadersBySuffix("tiff");
         ImageReader reader = (ImageReader) readers.next();
-        ImageInputStream iis = ImageIO.createImageInputStream(new File(filename));
-        reader.setInput(iis);
-        IIOMetadata imageMetadata = reader.getImageMetadata(0);
-        Element root = (Element) imageMetadata.getAsTree(STANDARD_METADATA_FORMAT);
-        Element comprElement = (Element) root.getElementsByTagName("Compression").item(0);
-        Node comprTypeNode = comprElement.getElementsByTagName("CompressionTypeName").item(0);
-        String actualCompression = comprTypeNode.getAttributes().getNamedItem("value").getNodeValue();
-        assertEquals("Incorrect TIFF compression in file " + filename, expectedCompression, actualCompression);
-        iis.close();
+        try (ImageInputStream iis = ImageIO.createImageInputStream(new File(filename)))
+        {
+            reader.setInput(iis);
+            IIOMetadata imageMetadata = reader.getImageMetadata(0);
+            Element root = (Element) imageMetadata.getAsTree(STANDARD_METADATA_FORMAT);
+            Element comprElement = (Element) root.getElementsByTagName("Compression").item(0);
+            Node comprTypeNode = comprElement.getElementsByTagName("CompressionTypeName").item(0);
+            String actualCompression = comprTypeNode.getAttributes().getNamedItem("value").getNodeValue();
+            assertEquals("Incorrect TIFF compression in file " + filename, expectedCompression, actualCompression);
+        }
         reader.dispose();
+    }
+
+    private void checkFileTypeByContent(String filename, FileType fileType) throws IOException
+    {
+        BufferedInputStream bis = new BufferedInputStream(new FileInputStream(filename));
+        assertEquals(fileType, FileTypeDetector.detectFileType(bis));
+        IOUtils.closeQuietly(bis);  
     }
 
 }

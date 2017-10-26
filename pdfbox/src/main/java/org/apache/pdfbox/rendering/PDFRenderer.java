@@ -20,7 +20,6 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
-
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -128,12 +127,23 @@ public class PDFRenderer
 
         // use a transparent background if the imageType supports alpha
         Graphics2D g = image.createGraphics();
-        if (imageType != ImageType.ARGB)
+        if (imageType == ImageType.ARGB)
+        {
+            g.setBackground(new Color(0, 0, 0, 0));
+        }
+        else
         {
             g.setBackground(Color.WHITE);
         }
+        g.clearRect(0, 0, image.getWidth(), image.getHeight());
+        
+        transform(g, page, scale);
 
-        renderPage(page, g, image.getWidth(), image.getHeight(), scale, scale);
+        // the end-user may provide a custom PageDrawer
+        PageDrawerParameters parameters = new PageDrawerParameters(this, page);
+        PageDrawer drawer = createPageDrawer(parameters);
+        drawer.drawPage(g, page.getCropBox());       
+        
         g.dispose();
 
         return image;
@@ -162,21 +172,27 @@ public class PDFRenderer
     {
         PDPage page = document.getPage(pageIndex);
         // TODO need width/wight calculations? should these be in PageDrawer?
-        PDRectangle adjustedCropBox = page.getCropBox();
-        renderPage(page, graphics, (int)adjustedCropBox.getWidth(), (int)adjustedCropBox.getHeight(), scale, scale);
-    }
 
-    // renders a page to the given graphics
-    private void renderPage(PDPage page, Graphics2D graphics, int width, int height, float scaleX,
-                            float scaleY) throws IOException
-    {
-        // TODO should we be passing the scale to PageDrawer rather than messing with Graphics?
-        graphics.scale(scaleX, scaleY);
-        graphics.clearRect(0, 0, width, height);
+        transform(graphics, page, scale);
 
         PDRectangle cropBox = page.getCropBox();
+        graphics.clearRect(0, 0, (int) cropBox.getWidth(), (int) cropBox.getHeight());
+
+        // the end-user may provide a custom PageDrawer
+        PageDrawerParameters parameters = new PageDrawerParameters(this, page);
+        PageDrawer drawer = createPageDrawer(parameters);
+        drawer.drawPage(graphics, cropBox);
+    }
+
+    // scale rotate translate
+    private void transform(Graphics2D graphics, PDPage page, float scale)
+    {
+        graphics.scale(scale, scale);
+
+        // TODO should we be passing the scale to PageDrawer rather than messing with Graphics?
         int rotationAngle = page.getRotation();
-        
+        PDRectangle cropBox = page.getCropBox();
+
         if (rotationAngle != 0)
         {
             float translateX = 0;
@@ -193,15 +209,12 @@ public class PDFRenderer
                     translateX = cropBox.getWidth();
                     translateY = cropBox.getHeight();
                     break;
+                default:
+                    break;
             }
             graphics.translate(translateX, translateY);
             graphics.rotate((float) Math.toRadians(rotationAngle));
         }
-
-        // the end-user may provide a custom PageDrawer
-        PageDrawerParameters parameters = new PageDrawerParameters(this, page);
-        PageDrawer drawer = createPageDrawer(parameters);
-        drawer.drawPage(graphics, cropBox);
     }
 
     /**

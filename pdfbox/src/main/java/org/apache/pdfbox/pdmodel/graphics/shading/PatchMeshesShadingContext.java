@@ -48,7 +48,7 @@ abstract class PatchMeshesShadingContext extends TriangleBasedShadingContext
     /**
      * patch list
      */
-    private List<Patch> patchList = new ArrayList<Patch>();
+    private List<Patch> patchList = new ArrayList<>();
     
     /**
      * Constructor creates an instance to be used for fill operations.
@@ -92,14 +92,17 @@ abstract class PatchMeshesShadingContext extends TriangleBasedShadingContext
         for (int i = 0; i < numberOfColorComponents; ++i)
         {
             colRange[i] = shadingType.getDecodeForParameter(2 + i);
+            if (colRange[i] == null)
+            {
+                throw new IOException("Range missing in shading /Decode entry");
+            }
         }
-        List<Patch> list = new ArrayList<Patch>();
+        List<Patch> list = new ArrayList<>();
         long maxSrcCoord = (long) Math.pow(2, bitsPerCoordinate) - 1;
         long maxSrcColor = (long) Math.pow(2, bitsPerColorComponent) - 1;
         COSStream cosStream = (COSStream) dict;
 
-        ImageInputStream mciis = new MemoryCacheImageInputStream(cosStream.getUnfilteredStream());
-        try
+        try (ImageInputStream mciis = new MemoryCacheImageInputStream(cosStream.createInputStream()))
         {
             Point2D[] implicitEdge = new Point2D[4];
             float[][] implicitCornerColor = new float[2][numberOfColorComponents];
@@ -114,7 +117,8 @@ abstract class PatchMeshesShadingContext extends TriangleBasedShadingContext
                 LOG.error(ex);
             }
 
-            while (true)
+            boolean eof = false;
+            while (!eof)
             {
                 try
                 {
@@ -150,13 +154,9 @@ abstract class PatchMeshesShadingContext extends TriangleBasedShadingContext
                 }
                 catch (EOFException ex)
                 {
-                    break;
+                    eof = true;
                 }
             }
-        }
-        finally
-        {
-            mciis.close();
         }
         return list;
     }
@@ -259,7 +259,7 @@ abstract class PatchMeshesShadingContext extends TriangleBasedShadingContext
     @Override
     protected Map<Point, Integer> calcPixelTable(Rectangle deviceBounds)  throws IOException
     {
-        Map<Point, Integer> map = new HashMap<Point, Integer>();
+        Map<Point, Integer> map = new HashMap<>();
         for (Patch it : patchList)
         {
             super.calcPixelTable(it.listOfTriangles, map, deviceBounds);

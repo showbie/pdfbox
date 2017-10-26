@@ -24,7 +24,6 @@ import javax.imageio.metadata.IIOInvalidTreeException;
 import javax.imageio.metadata.IIOMetadata;
 import javax.imageio.metadata.IIOMetadataNode;
 import java.awt.image.BufferedImage;
-import static org.apache.pdfbox.tools.imageio.MetaUtil.SUN_TIFF_FORMAT;
 import static org.apache.pdfbox.tools.imageio.MetaUtil.debugLogMetadata;
 
 /**
@@ -60,12 +59,14 @@ final class TIFFUtil
     }
 
     /**
-     * Updates the given ImageIO metadata with Sun's custom TIFF tags.
-     * {@see https://svn.apache.org/repos/asf/xmlgraphics/commons/tags/commons-1_3_1/src/java/org/
-     *       apache/xmlgraphics/image/writer/imageio/ImageIOTIFFImageWriter.java}
-     * {@see http://download.java.net/media/jai-imageio/javadoc/1.0_01/com/sun/media/imageio/
-     *       plugins/tiff/package-summary.html}
-     * {@see http://partners.adobe.com/public/developer/tiff/index.html}
+     * Updates the given ImageIO metadata with Sun's custom TIFF tags, as described in
+     * the <a href="https://svn.apache.org/repos/asf/xmlgraphics/commons/tags/commons-1_3_1/src/java/org/apache/xmlgraphics/image/writer/imageio/ImageIOTIFFImageWriter.java">org.apache.xmlgraphics.image.writer.imageio.ImageIOTIFFImageWriter
+     * sources</a>, 
+     * the <a href="http://download.java.net/media/jai-imageio/javadoc/1.0_01/com/sun/media/imageio/plugins/tiff/package-summary.html">com.sun.media.imageio.plugins.tiff
+     * package javadoc</a>
+     * and the <a href="http://partners.adobe.com/public/developer/tiff/index.html">TIFF
+     * specification</a>.
+     *
      * @param image buffered image which will be written
      * @param metadata ImageIO metadata
      * @param dpi image dots per inch
@@ -74,21 +75,20 @@ final class TIFFUtil
     static void updateMetadata(IIOMetadata metadata, BufferedImage image, int dpi)
             throws IIOInvalidTreeException
     {
-        debugLogMetadata(metadata, SUN_TIFF_FORMAT);
-
-        if (!SUN_TIFF_FORMAT.equals(metadata.getNativeMetadataFormatName()))
+        String metaDataFormat = metadata.getNativeMetadataFormatName();
+        if (metaDataFormat == null)
         {
-            LOG.debug("Using unknown TIFF image writer: " + metadata.getNativeMetadataFormatName());
+            LOG.debug("TIFF image writer doesn't support any data format");
             return;
         }
 
-        IIOMetadataNode root = new IIOMetadataNode(SUN_TIFF_FORMAT);
+        debugLogMetadata(metadata, metaDataFormat);
+
+        IIOMetadataNode root = new IIOMetadataNode(metaDataFormat);
         IIOMetadataNode ifd;
         if (root.getElementsByTagName("TIFFIFD").getLength() == 0)
         {
             ifd = new IIOMetadataNode("TIFFIFD");
-            ifd.setAttribute("tagSets",
-                             "com.sun.media.imageio.plugins.tiff.BaselineTIFFTagSet");
             root.appendChild(ifd);
         }
         else
@@ -112,9 +112,9 @@ final class TIFFUtil
             ifd.appendChild(createShortField(262, "PhotometricInterpretation", 0));
         }
         
-        metadata.mergeTree(SUN_TIFF_FORMAT, root);
+        metadata.mergeTree(metaDataFormat, root);
         
-        debugLogMetadata(metadata, SUN_TIFF_FORMAT);
+        debugLogMetadata(metadata, metaDataFormat);
     }
 
     private static IIOMetadataNode createShortField(int tiffTagNumber, String name, int val)

@@ -19,6 +19,7 @@ package org.apache.pdfbox.filter;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBuffer;
 import java.awt.image.DataBufferByte;
+import java.awt.image.DataBufferUShort;
 import java.awt.image.WritableRaster;
 import java.io.IOException;
 import java.io.InputStream;
@@ -56,24 +57,33 @@ public final class JPXFilter extends Filter
         BufferedImage image = readJPX(encoded, result);
 
         WritableRaster raster = image.getRaster();
-        if (raster.getDataBuffer().getDataType() != DataBuffer.TYPE_BYTE)
+        switch (raster.getDataBuffer().getDataType())
         {
-            throw new IOException("Not implemented: greater than 8-bit depth");
-        }
-        DataBufferByte buffer = (DataBufferByte)raster.getDataBuffer();
-        decoded.write(buffer.getData());
+            case DataBuffer.TYPE_BYTE:
+                DataBufferByte byteBuffer = (DataBufferByte) raster.getDataBuffer();
+                decoded.write(byteBuffer.getData());
+                return result;
 
-        return result;
+            case DataBuffer.TYPE_USHORT:
+                DataBufferUShort wordBuffer = (DataBufferUShort) raster.getDataBuffer();
+                for (short w : wordBuffer.getData())
+                {
+                    decoded.write(w >> 8);
+                    decoded.write(w);
+                }
+                return result;
+
+            default:
+                throw new IOException("Data type " + raster.getDataBuffer().getDataType() + " not implemented");
+        }        
     }
 
     // try to read using JAI Image I/O
     private BufferedImage readJPX(InputStream input, DecodeResult result) throws IOException
     {
         ImageReader reader = findImageReader("JPEG2000", "Java Advanced Imaging (JAI) Image I/O Tools are not installed");
-        ImageInputStream iis = null;
-        try
+        try (ImageInputStream iis = ImageIO.createImageInputStream(input))
         {
-            iis = ImageIO.createImageInputStream(input);
             reader.setInput(iis, true, true);
 
             BufferedImage image;
@@ -91,7 +101,10 @@ public final class JPXFilter extends Filter
 
             // "If the image stream uses the JPXDecode filter, this entry is optional
             // and shall be ignored if present"
-            parameters.setInt(COSName.BITS_PER_COMPONENT, image.getColorModel().getComponentSize(0));
+            //
+            // note that indexed color spaces make the BPC logic tricky, see PDFBOX-2204
+            int bpc = image.getColorModel().getPixelSize() / image.getRaster().getNumBands();
+            parameters.setInt(COSName.BITS_PER_COMPONENT, bpc);
 
             // "Decode shall be ignored, except in the case where the image is treated as a mask"
             if (!parameters.getBoolean(COSName.IMAGE_MASK, false))
@@ -113,10 +126,6 @@ public final class JPXFilter extends Filter
         }
         finally
         {
-            if (iis != null)
-            {
-                iis.close();
-            }
             reader.dispose();
         }
     }

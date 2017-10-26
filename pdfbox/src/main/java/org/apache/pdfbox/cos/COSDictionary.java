@@ -17,14 +17,21 @@
 package org.apache.pdfbox.cos;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.common.COSObjectable;
 import org.apache.pdfbox.util.DateConverter;
+import org.apache.pdfbox.util.SmallMap;
 
 /**
  * This class represents a dictionary where name/value pairs reside.
@@ -34,13 +41,15 @@ import org.apache.pdfbox.util.DateConverter;
  */
 public class COSDictionary extends COSBase implements COSUpdateInfo
 {
+	
     private static final String PATH_SEPARATOR = "/";
     private boolean needToBeUpdated;
 
     /**
      * The name-value pairs of this dictionary. The pairs are kept in the order they were added to the dictionary.
      */
-    protected Map<COSName, COSBase> items = new LinkedHashMap<COSName, COSBase>();
+//    protected Map<COSName, COSBase> items = new LinkedHashMap<COSName, COSBase>();
+    protected Map<COSName, COSBase> items = new SmallMap<>();
 
     /**
      * Constructor.
@@ -48,6 +57,7 @@ public class COSDictionary extends COSBase implements COSUpdateInfo
     public COSDictionary()
     {
         // default constructor
+        debugInstanceCount();
     }
 
     /**
@@ -58,8 +68,65 @@ public class COSDictionary extends COSBase implements COSUpdateInfo
     public COSDictionary(COSDictionary dict)
     {
         items.putAll(dict.items);
+        
+        debugInstanceCount();
     }
 
+    private static final boolean DO_DEBUG_INSTANCE_COUNT = false;
+    private static final List<WeakReference<COSDictionary>> DICT_INSTANCES = 
+            DO_DEBUG_INSTANCE_COUNT ? new ArrayList<WeakReference<COSDictionary>>() : null;
+
+    /**
+     * Only for memory debugging purposes (especially PDFBOX-3284): holds weak
+     * references to all instances and prints after each 10,000th instance a
+     * statistic across all instances showing how many instances we have per
+     * dictionary size (item count).
+     * This is to show that there can be a large number of COSDictionary instances
+     * but each having only few items, thus using a {@link LinkedHashMap} is a
+     * waste of memory resources.
+     * 
+     * <p>This method should be removed if further testing of COSDictionary uses
+     * is not needed anymore.</p>
+     */
+    private void debugInstanceCount()
+    {
+        if (DO_DEBUG_INSTANCE_COUNT)
+        {
+            synchronized (DICT_INSTANCES)
+            {
+                DICT_INSTANCES.add(new WeakReference<>(this));
+                // print statistics at each 10,000th instance
+                if (DICT_INSTANCES.size() % 10000 == 0)
+                {
+                    int[] sizeCount = new int[100];
+                    for (WeakReference<COSDictionary> dict : DICT_INSTANCES)
+                    {
+                        COSDictionary curDict = dict.get();
+                        if (curDict != null)
+                        {
+                            int sizeIdx = curDict.size();
+                            sizeCount[sizeIdx < sizeCount.length ? sizeIdx
+                                    : sizeCount.length - 1]++;
+                        }
+                    }
+                    // find biggest
+                    int maxIdx = -1;
+                    int max = 0;
+                    for (int sizeIdx = 0; sizeIdx < sizeCount.length; ++sizeIdx)
+                    {
+                        if (max < sizeCount[sizeIdx])
+                        {
+                            maxIdx = sizeIdx;
+                            max = sizeCount[sizeIdx];
+                        }
+                    }
+                    System.out.println("COSDictionary: dictionary size occurrences (max idx: " + maxIdx + "): " + Arrays.toString(sizeCount));
+                }
+            }
+        }
+    }
+    
+    
     /**
      * @see java.util.Map#containsValue(java.lang.Object)
      *
@@ -779,8 +846,12 @@ public class COSDictionary extends COSBase implements COSUpdateInfo
      */
     public Calendar getDate(COSName key)
     {
-        COSString date = (COSString) getDictionaryObject(key);
-        return DateConverter.toCalendar(date);
+        COSBase base = getDictionaryObject(key);
+        if (base instanceof COSString)
+        {
+            return DateConverter.toCalendar((COSString) base);
+        }
+        return null;
     }
 
     /**
@@ -1377,23 +1448,6 @@ public class COSDictionary extends COSBase implements COSUpdateInfo
     }
 
     /**
-     * This will add all of the dictionarys keys/values to this dictionary, but only if they don't already exist. If a
-     * key already exists in this dictionary then nothing is changed.
-     *
-     * @param dic The dic to get the keys from.
-     */
-    public void mergeInto(COSDictionary dic)
-    {
-        for (Map.Entry<COSName, COSBase> entry : dic.entrySet())
-        {
-            if (getItem(entry.getKey()) == null)
-            {
-                setItem(entry.getKey(), entry.getValue());
-            }
-        }
-    }
-
-    /**
      * Nice method, gives you every object you want Arrays works properly too. Try "P/Annots/[k]/Rect" where k means the
      * index of the Annotsarray.
      *
@@ -1402,9 +1456,8 @@ public class COSDictionary extends COSBase implements COSUpdateInfo
      */
     public COSBase getObjectFromPath(String objPath)
     {
-        COSBase retval = null;
         String[] path = objPath.split(PATH_SEPARATOR);
-        retval = this;
+        COSBase retval = this;
         for (String pathString : path)
         {
             if (retval instanceof COSArray)
@@ -1436,24 +1489,55 @@ public class COSDictionary extends COSBase implements COSUpdateInfo
     @Override
     public String toString()
     {
-        StringBuilder retVal = new StringBuilder("COSDictionary{");
-        for (COSName key : items.keySet())
+        try
         {
-            retVal.append("(");
-            retVal.append(key);
-            retVal.append(":");
-            if (getDictionaryObject(key) != null)
-            {
-                retVal.append(getDictionaryObject(key).toString());
-            }
-            else
-            {
-                retVal.append("<null>");
-            }
-            retVal.append(") ");
+            return getDictionaryString(this, new ArrayList<COSBase>());
         }
-        retVal.append("}");
-        return retVal.toString();
+        catch (IOException e)
+        {
+            return "COSDictionary{" + e.getMessage() + "}";
+        }
     }
 
+    private static String getDictionaryString(COSBase base, List<COSBase> objs) throws IOException
+    {
+        if (base == null)
+        {
+            return "null";
+        }
+        if (objs.contains(base))
+        {
+            // avoid endless recursion
+            return String.valueOf(base.hashCode());
+        }
+        objs.add(base);
+        if (base instanceof COSDictionary)
+        {
+            StringBuilder sb = new StringBuilder();
+            sb.append("COSDictionary{");
+            for (Map.Entry<COSName, COSBase> x : ((COSDictionary) base).entrySet())
+            {
+                sb.append(x.getKey());
+                sb.append(":");
+                sb.append(getDictionaryString(x.getValue(), objs));
+                sb.append(";");
+            }
+            sb.append("}");
+            if (base instanceof COSStream)
+            {
+                try (InputStream stream = ((COSStream) base).createRawInputStream())
+                {
+                    byte[] b = IOUtils.toByteArray(stream);
+                    sb.append("COSStream{").append(Arrays.hashCode(b)).append("}");
+                }
+            }
+            return sb.toString();
+        }
+        if (base instanceof COSObject)
+        {
+            COSObject obj = (COSObject) base;
+            return "COSObject{" + getDictionaryString(obj.getObject(), objs) + "}";
+        }
+        return base.toString();
+    }
 }

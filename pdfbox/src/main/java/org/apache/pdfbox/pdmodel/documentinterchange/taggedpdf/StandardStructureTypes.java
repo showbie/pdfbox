@@ -297,7 +297,7 @@ public class StandardStructureTypes
     /**
      * All standard structure types.
      */
-    public static List<String> types = new ArrayList<String>();
+    public static List<String> types = new ArrayList<>();
 
     static
     {
@@ -310,11 +310,7 @@ public class StandardStructureTypes
                 {
                     types.add(field.get(null).toString());
                 }
-                catch (IllegalArgumentException e)
-                {
-                    LOG.error(e,e);
-                }
-                catch (IllegalAccessException e)
+                catch (IllegalArgumentException | IllegalAccessException e)
                 {
                     LOG.error(e,e);
                 }

@@ -37,12 +37,12 @@ public class CFFCIDFont extends CFFFont
     private String ordering;
     private int supplement;
 
-    private List<Map<String, Object>> fontDictionaries = new LinkedList<Map<String,Object>>();
-    private List<Map<String, Object>> privateDictionaries = new LinkedList<Map<String,Object>>();
+    private List<Map<String, Object>> fontDictionaries = new LinkedList<>();
+    private List<Map<String, Object>> privateDictionaries = new LinkedList<>();
     private FDSelect fdSelect;
 
     private final Map<Integer, CIDKeyedType2CharString> charStringCache =
-            new ConcurrentHashMap<Integer, CIDKeyedType2CharString>();
+            new ConcurrentHashMap<>();
 
     private final PrivateType1CharStringReader reader = new PrivateType1CharStringReader();
 
@@ -202,15 +202,15 @@ public class CFFCIDFont extends CFFFont
      *
      * @param gid GID
      */
-    private IndexData getLocalSubrIndex(int gid)
+    private byte[][] getLocalSubrIndex(int gid)
     {
         int fdArrayIndex = this.fdSelect.getFDIndex(gid);
         if (fdArrayIndex == -1)
         {
-            return new IndexData(0);
+            return null;
         }
         Map<String, Object> privDict = this.privateDictionaries.get(fdArrayIndex);
-        return (IndexData)privDict.get("Subrs");
+        return (byte[][])privDict.get("Subrs");
     }
 
     /**
@@ -219,6 +219,7 @@ public class CFFCIDFont extends CFFFont
      * @param cid CID
      * @throws IOException if the charstring could not be read
      */
+    @Override
     public CIDKeyedType2CharString getType2CharString(int cid) throws IOException
     {
         CIDKeyedType2CharString type2 = charStringCache.get(cid);
@@ -226,10 +227,10 @@ public class CFFCIDFont extends CFFFont
         {
             int gid = charset.getGIDForCID(cid);
 
-            byte[] bytes = charStrings.get(gid);
+            byte[] bytes = charStrings[gid];
             if (bytes == null)
             {
-                bytes = charStrings.get(0); // .notdef
+                bytes = charStrings[0]; // .notdef
             }
             Type2CharStringParser parser = new Type2CharStringParser(fontName, cid);
             List<Object> type2seq = parser.parse(bytes, globalSubrIndex, getLocalSubrIndex(gid));

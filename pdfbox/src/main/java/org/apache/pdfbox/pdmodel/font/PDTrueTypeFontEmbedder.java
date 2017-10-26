@@ -24,13 +24,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.apache.fontbox.ttf.HorizontalMetricsTable;
+import org.apache.fontbox.ttf.TrueTypeFont;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.common.COSArrayList;
 import org.apache.pdfbox.pdmodel.font.encoding.Encoding;
 import org.apache.pdfbox.pdmodel.font.encoding.GlyphList;
-import org.apache.pdfbox.pdmodel.font.encoding.WinAnsiEncoding;
 
 /**
  * Embedded PDTrueTypeFont builder. Helper class to populate a PDTrueTypeFont from a TTF.
@@ -45,19 +45,18 @@ final class PDTrueTypeFontEmbedder extends TrueTypeEmbedder
     /**
      * Creates a new TrueType font embedder for the given TTF as a PDTrueTypeFont.
      *
-     * @param document parent document
-     * @param dict font dictionary
+     * @param document The parent document
+     * @param dict Font dictionary
      * @param ttfStream TTF stream
+     * @param encoding The PostScript encoding vector to be used for embedding.
      * @throws IOException if the TTF could not be read
      */
-    PDTrueTypeFontEmbedder(PDDocument document, COSDictionary dict, InputStream ttfStream)
-            throws IOException
+    PDTrueTypeFontEmbedder(PDDocument document, COSDictionary dict, TrueTypeFont ttf,
+                           Encoding encoding) throws IOException
     {
-        super(document, dict, ttfStream, false);
+        super(document, dict, ttf, false);
         dict.setItem(COSName.SUBTYPE, COSName.TRUE_TYPE);
-
-        // only support WinAnsiEncoding encoding right now
-        Encoding encoding = new WinAnsiEncoding();
+        
         GlyphList glyphList = GlyphList.getAdobeGlyphList();
         this.fontEncoding = encoding;
         dict.setItem(COSName.ENCODING, encoding.getCOSObject());
@@ -84,7 +83,7 @@ final class PDTrueTypeFontEmbedder extends TrueTypeEmbedder
         int firstChar = Collections.min(codeToName.keySet());
         int lastChar = Collections.max(codeToName.keySet());
 
-        List<Integer> widths = new ArrayList<Integer>(lastChar - firstChar + 1);
+        List<Integer> widths = new ArrayList<>(lastChar - firstChar + 1);
         for (int i = 0; i < lastChar - firstChar + 1; i++)
         {
             widths.add(0);

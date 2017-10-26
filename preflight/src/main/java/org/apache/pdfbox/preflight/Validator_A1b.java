@@ -39,7 +39,7 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
-import org.apache.commons.io.IOUtils;
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.preflight.ValidationResult.ValidationError;
 import org.apache.pdfbox.preflight.exception.SyntaxValidationException;
 import org.apache.pdfbox.preflight.parser.PreflightParser;
@@ -188,7 +188,7 @@ public class Validator_A1b
         }
         else
         {
-            System.out.println("The file " + file.getName() + " is not valid, error(s) :");
+            System.out.println("The file " + file.getName() + " is not a valid PDF/A-1b file, error(s) :");
             for (ValidationError error : result.getErrorsList())
             {
                 System.out.print(error.getErrorCode() + " : " + error.getDetails());
@@ -210,7 +210,7 @@ public class Validator_A1b
 
     private static List<File> listFiles(String path) throws IOException
     {
-        List<File> files = new ArrayList<File>();
+        List<File> files = new ArrayList<>();
         File f = new File(path);
         if (f.isFile())
         {

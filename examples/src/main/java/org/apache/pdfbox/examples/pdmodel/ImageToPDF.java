@@ -27,8 +27,12 @@ import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
  *
  * The example is taken from the pdf file format specification.
  */
-public class ImageToPDF
+public final class ImageToPDF
 {
+    private ImageToPDF()
+    {
+    }
+    
     public static void main(String[] args) throws IOException
     {
         if (args.length != 2)
@@ -46,8 +50,7 @@ public class ImageToPDF
             System.exit(1);
         }
 
-        PDDocument doc = new PDDocument();
-        try
+        try (PDDocument doc = new PDDocument())
         {
             PDPage page = new PDPage();
             doc.addPage(page);
@@ -57,20 +60,16 @@ public class ImageToPDF
             // call LosslessFactory.createFromImage() instead
             PDImageXObject pdImage = PDImageXObject.createFromFile(imagePath, doc);
             
-            PDPageContentStream contents = new PDPageContentStream(doc, page);
-            
             // draw the image at full size at (x=20, y=20)
-            contents.drawImage(pdImage, 20, 20);
-            
-            // to draw the image at half size at (x=20, y=20) use
-            // contents.drawImage(pdImage, 20, 20, pdImage.getWidth() / 2, pdImage.getHeight() / 2);
-            
-            contents.close();
+            try (PDPageContentStream contents = new PDPageContentStream(doc, page))
+            {
+                // draw the image at full size at (x=20, y=20)
+                contents.drawImage(pdImage, 20, 20);
+                
+                // to draw the image at half size at (x=20, y=20) use
+                // contents.drawImage(pdImage, 20, 20, pdImage.getWidth() / 2, pdImage.getHeight() / 2); 
+            }
             doc.save(pdfPath);
-        }
-        finally
-        {
-            doc.close();
         }
     }
 }

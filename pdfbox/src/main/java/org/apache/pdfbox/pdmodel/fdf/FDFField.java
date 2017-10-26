@@ -76,24 +76,26 @@ public class FDFField implements COSObjectable
         this();
         this.setPartialFieldName(fieldXML.getAttribute("name"));
         NodeList nodeList = fieldXML.getChildNodes();
-        List<FDFField> kids = new ArrayList<FDFField>();
+        List<FDFField> kids = new ArrayList<>();
         for (int i = 0; i < nodeList.getLength(); i++)
         {
             Node node = nodeList.item(i);
             if (node instanceof Element)
             {
                 Element child = (Element) node;
-                if (child.getTagName().equals("value"))
+                switch (child.getTagName())
                 {
-                    setValue(XMLUtil.getNodeValue(child));
-                }
-                else if (child.getTagName().equals("value-richtext"))
-                {
-                    setRichText(new COSString(XMLUtil.getNodeValue(child)));
-                }
-                else if (child.getTagName().equals("field"))
-                {
-                    kids.add(new FDFField(child));
+                    case "value":
+                        setValue(XMLUtil.getNodeValue(child));
+                        break;
+                    case "value-richtext":
+                        setRichText(new COSString(XMLUtil.getNodeValue(child)));
+                        break;
+                    case "field":
+                        kids.add(new FDFField(child));
+                        break;
+                    default:
+                        break;
                 }
             }
         }
@@ -123,7 +125,7 @@ public class FDFField implements COSObjectable
             }
             else if (value instanceof COSStream)
             {
-                output.write("<value>" + escapeXML(((COSStream) value).getString()) + "</value>\n");
+                output.write("<value>" + escapeXML(((COSStream) value).toTextString()) + "</value>\n");
             }
         }
         String rt = getRichText();
@@ -165,12 +167,12 @@ public class FDFField implements COSObjectable
         List<FDFField> retval = null;
         if (kids != null)
         {
-            List<FDFField> actuals = new ArrayList<FDFField>();
+            List<FDFField> actuals = new ArrayList<>();
             for (int i = 0; i < kids.size(); i++)
             {
                 actuals.add(new FDFField((COSDictionary) kids.getObject(i)));
             }
-            retval = new COSArrayList<FDFField>(actuals, kids);
+            retval = new COSArrayList<>(actuals, kids);
         }
         return retval;
     }
@@ -180,16 +182,16 @@ public class FDFField implements COSObjectable
      *
      * @param kids A list of FDFField objects.
      */
-    public void setKids(List<FDFField> kids)
+    public final void setKids(List<FDFField> kids)
     {
         field.setItem(COSName.KIDS, COSArrayList.converterToCOSArray(kids));
     }
 
     /**
      * This will get the "T" entry in the field dictionary. A partial field name. Where the fully qualified field name
-     * is a concatenation of the parent's fully qualified field name and "." as a separator. For example<br/>
-     * Address.State<br />
-     * Address.City<br />
+     * is a concatenation of the parent's fully qualified field name and "." as a separator. For example<br>
+     * Address.State<br>
+     * Address.City<br>
      *
      * @return The partial field name.
      */
@@ -209,9 +211,9 @@ public class FDFField implements COSObjectable
     }
 
     /**
-     * This will get the value for the field. This will return type will either be <br />
-     * String : Checkboxes, Radio Button <br />
-     * java.util.List of strings: Choice Field PDTextStream: Textfields
+     * This will get the value for the field. This will return type will either be <br>
+     * String : Checkboxes, Radio Button, Textfields<br>
+     * java.util.List of strings: Choice Field
      *
      * @return The value of the field.
      * @throws IOException If there is an error getting the value.
@@ -227,9 +229,13 @@ public class FDFField implements COSObjectable
         {
             return COSArrayList.convertCOSStringCOSArrayToList((COSArray) value);
         }
-        else if (value instanceof COSString || value instanceof COSStream)
+        else if (value instanceof COSString)
         {
-            return value;
+            return ((COSString) value).getString();
+        }
+        else if (value instanceof COSStream)
+        {
+            return ((COSStream) value).toTextString();
         }
         else if (value != null)
         {
@@ -250,6 +256,7 @@ public class FDFField implements COSObjectable
     public COSBase getCOSValue() throws IOException
     {
         COSBase value = field.getDictionaryObject(COSName.V);
+        
         if (value instanceof COSName)
         {
             return value;
@@ -284,11 +291,11 @@ public class FDFField implements COSObjectable
         COSBase cos = null;
         if (value instanceof List)
         {
-            cos = COSArrayList.convertStringListToCOSStringCOSArray((List) value);
+            cos = COSArrayList.convertStringListToCOSStringCOSArray((List<String>) value);
         }
         else if (value instanceof String)
         {
-            cos = COSName.getPDFName((String) value);
+            cos = new COSString((String) value);
         }
         else if (value instanceof COSObjectable)
         {
@@ -650,7 +657,7 @@ public class FDFField implements COSObjectable
         COSArray array = (COSArray) field.getDictionaryObject(COSName.OPT);
         if (array != null)
         {
-            List<Object> objects = new ArrayList<Object>();
+            List<Object> objects = new ArrayList<>();
             for (int i = 0; i < array.size(); i++)
             {
                 COSBase next = array.getObject(i);
@@ -664,7 +671,7 @@ public class FDFField implements COSObjectable
                     objects.add(new FDFOptionElement(value));
                 }
             }
-            retval = new COSArrayList<Object>(objects, array);
+            retval = new COSArrayList<>(objects, array);
         }
         return retval;
     }
@@ -746,7 +753,7 @@ public class FDFField implements COSObjectable
         }
         else
         {
-            return ((COSStream) rv).getString();
+            return ((COSStream) rv).toTextString();
         }
     }
 

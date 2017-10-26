@@ -17,36 +17,36 @@
 package org.apache.pdfbox.multipdf;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.pdfbox.cos.COSArray;
 import org.apache.pdfbox.cos.COSBase;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.cos.COSObject;
 import org.apache.pdfbox.cos.COSStream;
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.common.COSObjectable;
-import org.apache.pdfbox.pdmodel.common.COSStreamArray;
-import org.apache.pdfbox.pdmodel.common.PDStream;
 
 /**
  * Utility class used to clone PDF objects. It keeps track of objects it has already cloned.
  *
  */
-class PDFCloneUtility
+public class PDFCloneUtility
 {
 
     private final PDDocument destination;
-    private final Map<Object,COSBase> clonedVersion = new HashMap<Object,COSBase>();
+    private final Map<Object,COSBase> clonedVersion = new HashMap<>();
 
     /**
      * Creates a new instance for the given target document.
      * @param dest the destination PDF document that will receive the clones
      */
-    PDFCloneUtility(PDDocument dest)
+    public PDFCloneUtility(PDDocument dest)
     {
         this.destination = dest;
     }
@@ -110,38 +110,21 @@ class PDFCloneUtility
               retval = newArray;
               clonedVersion.put( base, retval );
           }
-          else if (base instanceof COSStreamArray)
-          {
-              // PDFBOX-2052
-              COSStreamArray originalStream = (COSStreamArray) base;
-
-              if (originalStream.size() > 0)
-              {
-                  throw new IllegalStateException("Cannot close stream array with items next to the streams.");
-              }
-
-              COSArray array = new COSArray();
-              for (int i = 0; i < originalStream.getStreamCount(); i++)
-              {
-                  COSBase base2 = originalStream.get(i);
-                  COSBase cloneForNewDocument = cloneForNewDocument(base2);
-                  array.add(cloneForNewDocument);
-              }
-              retval = new COSStreamArray(array);
-              clonedVersion.put(base, retval);
-          }
           else if( base instanceof COSStream )
           {
               COSStream originalStream = (COSStream)base;
-              PDStream stream = new PDStream( destination, originalStream.getFilteredStream(), true );
-              clonedVersion.put( base, stream.getStream() );
+              COSStream stream = destination.getDocument().createCOSStream();
+              try (OutputStream output = stream.createRawOutputStream();
+                   InputStream input = originalStream.createRawInputStream())
+              {
+                  IOUtils.copy(input, output);
+              }
+              clonedVersion.put( base, stream );
               for( Map.Entry<COSName, COSBase> entry :  originalStream.entrySet() )
               {
-                  stream.getStream().setItem(
-                          entry.getKey(),
-                          cloneForNewDocument(entry.getValue()));
+                  stream.setItem(entry.getKey(), cloneForNewDocument(entry.getValue()));
               }
-              retval = stream.getStream();
+              retval = stream;
           }
           else if( base instanceof COSDictionary )
           {
@@ -166,7 +149,7 @@ class PDFCloneUtility
 
       /**
        * Merges two objects of the same type by deep-cloning its members.
-       * <br/>
+       * <br>
        * Base and target must be instances of the same class.
        * @param base the base object to be cloned
        * @param target the merge target
@@ -214,15 +197,17 @@ class PDFCloneUtility
           {
             // does that make sense???
               COSStream originalStream = (COSStream)base;
-              PDStream stream = new PDStream( destination, originalStream.getFilteredStream(), true );
-              clonedVersion.put( base, stream.getStream() );
+              COSStream stream = destination.getDocument().createCOSStream();
+              try (OutputStream output = stream.createOutputStream(originalStream.getFilters()))
+              {
+                  IOUtils.copy(originalStream.createInputStream(), output);
+              }
+              clonedVersion.put( base, stream );
               for( Map.Entry<COSName, COSBase> entry : originalStream.entrySet() )
               {
-                  stream.getStream().setItem(
-                          entry.getKey(),
-                          cloneForNewDocument(entry.getValue()));
+                  stream.setItem(entry.getKey(), cloneForNewDocument(entry.getValue()));
               }
-              retval = stream.getStream();
+              retval = stream;
           }
           else if( base instanceof COSDictionary )
           {

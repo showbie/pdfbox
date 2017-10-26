@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentNameDictionary;
 import org.apache.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode;
@@ -35,11 +34,9 @@ import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationFileAttachme
 
 /**
  * This is an example on how to extract all embedded files from a PDF document.
- * <p>
- * Usage: java org.apache.pdfbox.examples.pdmodel.ExtractEmbeddedFiles &lt;input-pdf&gt;
  *
  */
-public class ExtractEmbeddedFiles
+public final class ExtractEmbeddedFiles
 {
     private ExtractEmbeddedFiles()
     {
@@ -50,9 +47,9 @@ public class ExtractEmbeddedFiles
      *
      * @param args The command line arguments.
      *
-     * @throws Exception If there is an error parsing the document.
+     * @throws IOException If there is an error parsing the document.
      */
-    public static void main( String[] args ) throws Exception
+    public static void main( String[] args ) throws IOException
     {
         if( args.length != 1 )
         {
@@ -132,15 +129,9 @@ public class ExtractEmbeddedFiles
         String embeddedFilename = filePath + filename;
         File file = new File(filePath + filename);
         System.out.println("Writing " + embeddedFilename);
-        FileOutputStream fos = null;
-        try
+        try (FileOutputStream fos = new FileOutputStream(file))
         {
-            fos = new FileOutputStream(file);
-            fos.write(embeddedFile.getByteArray());
-        }
-        finally
-        {
-            IOUtils.closeQuietly(fos);
+            fos.write(embeddedFile.toByteArray());
         }
     }
     

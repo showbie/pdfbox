@@ -16,24 +16,31 @@
  */
 package org.apache.pdfbox.tools;
 
+import java.awt.print.PrinterException;
 import java.awt.print.PrinterJob;
 import java.io.File;
-
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import javax.print.PrintService;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
-import org.apache.pdfbox.printing.PDFPrinter;
+import org.apache.pdfbox.printing.Orientation;
+import org.apache.pdfbox.printing.PDFPageable;
 
 /**
  * This is a command line program that will print a PDF document.
  * 
  * @author Ben Litchfield
  */
-public class PrintPDF
+public final class PrintPDF
 {
     private static final String PASSWORD = "-password";
     private static final String SILENT = "-silentPrint";
     private static final String PRINTER_NAME = "-printerName";
+    private static final String ORIENTATION = "-orientation";
+    private static final String BORDER = "-border";
+    private static final String DPI = "-dpi";
 
     /**
      * private constructor.
@@ -47,10 +54,10 @@ public class PrintPDF
      * Infamous main method.
      * 
      * @param args Command line arguments, should be one and a reference to a file.
-     * 
-     * @throws Exception If there is an error parsing the document.
+     * @throws PrinterException if the specified service cannot support the Pageable and Printable interfaces.
+     * @throws IOException if there is an error parsing the file.
      */
-    public static void main(String[] args) throws Exception
+    public static void main(String[] args) throws PrinterException, IOException
     {
         // suppress the Dock icon on OS X
         System.setProperty("apple.awt.UIElement", "true");
@@ -59,33 +66,62 @@ public class PrintPDF
         String pdfFile = null;
         boolean silentPrint = false;
         String printerName = null;
+        Orientation orientation = Orientation.AUTO;
+        boolean showPageBorder = false;
+        int dpi = 0;
+        Map <String,Orientation> orientationMap = new HashMap<>();
+        orientationMap.put("auto", Orientation.AUTO);
+        orientationMap.put("landscape", Orientation.LANDSCAPE);
+        orientationMap.put("portrait", Orientation.PORTRAIT);
         for (int i = 0; i < args.length; i++)
         {
-            if (args[i].equals(PASSWORD))
+            switch (args[i])
             {
-                i++;
-                if (i >= args.length)
-                {
-                    usage();
-                }
-                password = args[i];
-            }
-            else if (args[i].equals(PRINTER_NAME))
-            {
-                i++;
-                if (i >= args.length)
-                {
-                    usage();
-                }
-                printerName = args[i];
-            }
-            else if (args[i].equals(SILENT))
-            {
-                silentPrint = true;
-            }
-            else
-            {
-                pdfFile = args[i];
+                case PASSWORD:
+                    i++;
+                    if (i >= args.length)
+                    {
+                        usage();
+                    }
+                    password = args[i];
+                    break;
+                case PRINTER_NAME:
+                    i++;
+                    if (i >= args.length)
+                    {
+                        usage();
+                    }
+                    printerName = args[i];
+                    break;
+                case SILENT:
+                    silentPrint = true;
+                    break;
+                case ORIENTATION:
+                    i++;
+                    if (i >= args.length)
+                    {
+                        usage();
+                    }
+                    orientation = orientationMap.get(args[i]);
+                    if (orientation == null)
+                    {
+                        usage();
+                    }
+                    break;
+                case BORDER:
+                    showPageBorder = true;
+                    break;
+                case DPI:
+                    i++;
+                    if (i >= args.length)
+                    {
+                        usage();
+                    }
+                    dpi = Integer.parseInt(args[i]);
+                    break;
+                default:
+                    pdfFile = args[i];
+                    break;
             }
         }
 
@@ -94,11 +130,8 @@ public class PrintPDF
             usage();
         }
 
-        PDDocument document = null;
-        try
+        try (PDDocument document = PDDocument.load(new File(pdfFile), password))
         {
-            document = PDDocument.load(new File(pdfFile), password);
-
             PrinterJob printJob = PrinterJob.getPrinterJob();
             printJob.setJobName(new File(pdfFile).getName());
 
@@ -115,22 +148,11 @@ public class PrintPDF
                     }
                 }
             }
-
-            PDFPrinter printer = new PDFPrinter(document);
-            if (silentPrint)
+            printJob.setPageable(new PDFPageable(document, orientation, showPageBorder, dpi));
+            
+            if (silentPrint || printJob.printDialog())
             {
-                printer.silentPrint(printJob);
-            }
-            else
-            {
-                printer.print(printJob);
-            }
-        }
-        finally
-        {
-            if (document != null)
-            {
-                document.close();
+                printJob.print();
             }
         }
     }
@@ -140,9 +162,18 @@ public class PrintPDF
      */
     private static void usage()
     {
-        System.err.println("Usage: java -jar pdfbox-app-x.y.z.jar PrintPDF [OPTIONS] <PDF file>\n"
-                + "  -password  <password>        Password to decrypt document\n"
-                + "  -silentPrint                 Print without prompting for printer info\n");
+        String message = "Usage: java -jar pdfbox-app-x.y.z.jar PrintPDF [options] <inputfile>\n"
+                + "\nOptions:\n"
+                + "  -password  <password>                : Password to decrypt document\n"
+                + "  -printerName <name>                  : Print to specific printer\n"
+                + "  -orientation auto|portrait|landscape : Print using orientation\n"
+                + "                                           (default: auto)\n"
+                + "  -border                              : Print with border\n"
+                + "  -dpi                                 : Render into intermediate image with\n"
+                + "                                           specific dpi and then print\n"
+                + "  -silentPrint                         : Print without printer dialog box\n";
+        
+        System.err.println(message);
         System.exit(1);
     }
 }

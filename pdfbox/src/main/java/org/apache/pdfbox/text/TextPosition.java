@@ -17,6 +17,7 @@
 package org.apache.pdfbox.text;
 
 import java.text.Normalizer;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import org.apache.commons.logging.Log;
@@ -34,48 +35,6 @@ public final class TextPosition
     private static final Log LOG = LogFactory.getLog(TextPosition.class);
 
     private static final Map<Integer, String> DIACRITICS = createDiacritics();
-
-    // Adds non-decomposing diacritics to the hash with their related combining character.
-    // These are values that the unicode spec claims are equivalent but are not mapped in the form
-    // NFKC normalization method. Determined by going through the Combining Diacritical Marks
-    // section of the Unicode spec and identifying which characters are not  mapped to by the
-    // normalization.
-    private static Map<Integer, String> createDiacritics()
-    {
-        HashMap<Integer, String> map = new HashMap<Integer, String>();
-        map.put(0x0060, "\u0300");
-        map.put(0x02CB, "\u0300");
-        map.put(0x0027, "\u0301");
-        map.put(0x02B9, "\u0301");
-        map.put(0x02CA, "\u0301");
-        map.put(0x005e, "\u0302");
-        map.put(0x02C6, "\u0302");
-        map.put(0x007E, "\u0303");
-        map.put(0x02C9, "\u0304");
-        map.put(0x00B0, "\u030A");
-        map.put(0x02BA, "\u030B");
-        map.put(0x02C7, "\u030C");
-        map.put(0x02C8, "\u030D");
-        map.put(0x0022, "\u030E");
-        map.put(0x02BB, "\u0312");
-        map.put(0x02BC, "\u0313");
-        map.put(0x0486, "\u0313");
-        map.put(0x055A, "\u0313");
-        map.put(0x02BD, "\u0314");
-        map.put(0x0485, "\u0314");
-        map.put(0x0559, "\u0314");
-        map.put(0x02D4, "\u031D");
-        map.put(0x02D5, "\u031E");
-        map.put(0x02D6, "\u031F");
-        map.put(0x02D7, "\u0320");
-        map.put(0x02B2, "\u0321");
-        map.put(0x02CC, "\u0329");
-        map.put(0x02B7, "\u032B");
-        map.put(0x02CD, "\u0331");
-        map.put(0x005F, "\u0332");
-        map.put(0x204E, "\u0359");
-        return map;
-    }
 
     // text matrix for the start of the text object, coordinates are in display units
     // and have not been adjusted
@@ -102,14 +61,15 @@ public final class TextPosition
     // mutable
     private float[] widths;
     private String unicode;
+    private float direction = -1;
 
     /**
      * Constructor.
      *
      * @param pageRotation rotation of the page that the text is located in
-     * @param pageWidth rotation of the page that the text is located in
-     * @param pageHeight rotation of the page that the text is located in
-     * @param textMatrix TextMatrix for start of text (in display units)
+     * @param pageWidth width of the page that the text is located in
+     * @param pageHeight height of the page that the text is located in
+     * @param textMatrix text rendering matrix for start of text (in display units)
      * @param endX x coordinate of the end position
      * @param endY y coordinate of the end position
      * @param maxHeight Maximum height of text (in display units)
@@ -119,7 +79,7 @@ public final class TextPosition
      * @param charCodes An array of the internal PDF character codes for the glyphs in this text.
      * @param font The current font for this text position.
      * @param fontSize The new font size.
-     * @param fontSizeInPt The font size in pt units.
+     * @param fontSizeInPt The font size in pt units (see {@link #getFontSizeInPt()} for details).
      */
     public TextPosition(int pageRotation, float pageWidth, float pageHeight, Matrix textMatrix,
                         float endX, float endY, float maxHeight, float individualWidth,
@@ -157,8 +117,52 @@ public final class TextPosition
         }
     }
 
+    // Adds non-decomposing diacritics to the hash with their related combining character.
+    // These are values that the unicode spec claims are equivalent but are not mapped in the form
+    // NFKC normalization method. Determined by going through the Combining Diacritical Marks
+    // section of the Unicode spec and identifying which characters are not  mapped to by the
+    // normalization.
+    private static Map<Integer, String> createDiacritics()
+    {
+        Map<Integer, String> map = new HashMap<>(31);
+        map.put(0x0060, "\u0300");
+        map.put(0x02CB, "\u0300");
+        map.put(0x0027, "\u0301");
+        map.put(0x02B9, "\u0301");
+        map.put(0x02CA, "\u0301");
+        map.put(0x005e, "\u0302");
+        map.put(0x02C6, "\u0302");
+        map.put(0x007E, "\u0303");
+        map.put(0x02C9, "\u0304");
+        map.put(0x00B0, "\u030A");
+        map.put(0x02BA, "\u030B");
+        map.put(0x02C7, "\u030C");
+        map.put(0x02C8, "\u030D");
+        map.put(0x0022, "\u030E");
+        map.put(0x02BB, "\u0312");
+        map.put(0x02BC, "\u0313");
+        map.put(0x0486, "\u0313");
+        map.put(0x055A, "\u0313");
+        map.put(0x02BD, "\u0314");
+        map.put(0x0485, "\u0314");
+        map.put(0x0559, "\u0314");
+        map.put(0x02D4, "\u031D");
+        map.put(0x02D5, "\u031E");
+        map.put(0x02D6, "\u031F");
+        map.put(0x02D7, "\u0320");
+        map.put(0x02B2, "\u0321");
+        map.put(0x02CC, "\u0329");
+        map.put(0x02B7, "\u032B");
+        map.put(0x02CD, "\u0331");
+        map.put(0x005F, "\u0332");
+        map.put(0x204E, "\u0359");
+        return map;
+    }
+
     /**
-     * Return the string of characters stored in this object.
+     * Return the string of characters stored in this object. The length can be different than the
+     * CharacterCodes length e.g. if ligatures are used ("fi", "fl", "ffl") where one glyph
+     * represents several unicode characters.
      *
      * @return The string on the screen.
      */
@@ -178,7 +182,10 @@ public final class TextPosition
     }
 
     /**
-     * Return the text matrix stored in this object.
+     * The matrix containing the starting text position and scaling. Despite the name, it is not the
+     * text matrix set by the "Tm" operator, it is really the effective text rendering matrix (which
+     * is dependent on the current transformation matrix (set by the "cm" operator), the text matrix
+     * (set by the "Tm" operator), the font size (set by the "Tf" operator) and the page cropbox).
      *
      * @return The Matrix containing the starting text position
      */
@@ -193,36 +200,43 @@ public final class TextPosition
      */
     public float getDir()
     {
-        float a = textMatrix.getScaleY();
-        float b = textMatrix.getShearY();
-        float c = textMatrix.getShearX();
-        float d = textMatrix.getScaleX();
-
-        // 12 0   left to right
-        // 0 12
-        if (a > 0 && Math.abs(b) < d && Math.abs(c) < a && d > 0)
+        if (direction < 0)
         {
-            return 0;
+            float a = textMatrix.getScaleY();
+            float b = textMatrix.getShearY();
+            float c = textMatrix.getShearX();
+            float d = textMatrix.getScaleX();
+    
+            // 12 0   left to right
+            // 0 12
+            if (a > 0 && Math.abs(b) < d && Math.abs(c) < a && d > 0)
+            {
+                direction = 0;
+            }
+            // -12 0   right to left (upside down)
+            // 0 -12
+            else if (a < 0 && Math.abs(b) < Math.abs(d) && Math.abs(c) < Math.abs(a) && d < 0)
+            {
+                direction = 180;
+            }
+            // 0  12    up
+            // -12 0
+            else if (Math.abs(a) < Math.abs(c) && b > 0 && c < 0 && Math.abs(d) < b)
+            {
+                direction = 90;
+            }
+            // 0  -12   down
+            // 12 0
+            else if (Math.abs(a) < c && b < 0 && c > 0 && Math.abs(d) < Math.abs(b))
+            {
+                direction = 270;
+            }
+            else
+            {
+                direction = 0;
+            }
         }
-        // -12 0   right to left (upside down)
-        // 0 -12
-        else if (a < 0 && Math.abs(b) < Math.abs(d) && Math.abs(c) < Math.abs(a) && d < 0)
-        {
-            return 180;
-        }
-        // 0  12    up
-        // -12 0
-        else if (Math.abs(a) < Math.abs(c) && b > 0 && c < 0 && Math.abs(d) < b)
-        {
-            return 90;
-        }
-        // 0  -12   down
-        // 12 0
-        else if (Math.abs(a) < c && b < 0 && c > 0 && Math.abs(d) < Math.abs(b))
-        {
-            return 270;
-        }
-        return 0;
+        return direction;
     }
 
     /**
@@ -395,7 +409,10 @@ public final class TextPosition
     }
 
     /**
-     * This will get the font size that this object is suppose to be drawn at.
+     * This will get the font size that has been set with the "Tf" operator (Set text font and
+     * size). When the text is rendered, it may appear bigger or smaller depending on the current
+     * transformation matrix (set by the "cm" operator) and the text matrix (set by the "Tm"
+     * operator).
      *
      * @return The font size.
      */
@@ -405,8 +422,11 @@ public final class TextPosition
     }
 
     /**
-     * This will get the font size in pt. To get this size we have to multiply the pdf-fontsize
-     * and the scaling from the textmatrix
+     * This will get the font size in pt. To get this size we have to multiply the font size from
+     * {@link #getFontSize() getFontSize()} with the text matrix (set by the "Tm" operator)
+     * horizontal scaling factor and truncate the result to integer. The actual rendering may appear
+     * bigger or smaller depending on the current transformation matrix (set by the "cm" operator).
+     * To get the size in rendering, use {@link #getXScale() getXScale()}.
      *
      * @return The font size in pt.
      */
@@ -437,7 +457,11 @@ public final class TextPosition
     }
 
     /**
-     * @return Returns the xScale.
+     * This will get the X scaling factor. This is dependent on the current transformation matrix
+     * (set by the "cm" operator), the text matrix (set by the "Tm" operator) and the font size (set
+     * by the "Tf" operator).
+     *
+     * @return The X scaling factor.
      */
     public float getXScale()
     {
@@ -445,7 +469,11 @@ public final class TextPosition
     }
 
     /**
-     * @return Returns the yScale.
+     * This will get the Y scaling factor. This is dependent on the current transformation matrix
+     * (set by the "cm" operator), the text matrix (set by the "Tm" operator) and the font size (set
+     * by the "Tf" operator).
+     *
+     * @return The Y scaling factor.
      */
     public float getYScale()
     {
@@ -455,7 +483,7 @@ public final class TextPosition
     /**
      * Get the widths of each individual character.
      *
-     * @return An array that is the same length as the length of the string.
+     * @return An array that has the same length as the CharacterCodes array.
      */
     public float[] getIndividualWidths()
     {
@@ -472,10 +500,11 @@ public final class TextPosition
     public boolean contains(TextPosition tp2)
     {
         double thisXstart = getXDirAdj();
-        double thisXend = getXDirAdj() + getWidthDirAdj();
+        double thisWidth = getWidthDirAdj();
+        double thisXend = thisXstart + thisWidth;
 
         double tp2Xstart = tp2.getXDirAdj();
-        double tp2Xend = tp2.getXDirAdj() + tp2.getWidthDirAdj();
+        double tp2Xend = tp2Xstart + tp2.getWidthDirAdj();
 
         // no X overlap at all so return as soon as possible
         if (tp2Xend <= thisXstart || tp2Xstart >= thisXend)
@@ -485,8 +514,10 @@ public final class TextPosition
 
         // no Y overlap at all so return as soon as possible. Note: 0.0 is in the upper left and
         // y-coordinate is top of TextPosition
-        if (tp2.getYDirAdj() + tp2.getHeightDir() < getYDirAdj() ||
-           tp2.getYDirAdj() > getYDirAdj() + getHeightDir())
+        double thisYstart = getYDirAdj();
+        double tp2Ystart = tp2.getYDirAdj();
+        if (tp2Ystart + tp2.getHeightDir() < thisYstart ||
+                tp2Ystart > thisYstart + getHeightDir())
         {
             return false;
         }
@@ -496,13 +527,13 @@ public final class TextPosition
         else if (tp2Xstart > thisXstart && tp2Xend > thisXend)
         {
             double overlap = thisXend - tp2Xstart;
-            double overlapPercent = overlap/getWidthDirAdj();
+            double overlapPercent = overlap/thisWidth;
             return overlapPercent > .15;
         }
         else if (tp2Xstart < thisXstart && tp2Xend < thisXend)
         {
             double overlap = tp2Xend - thisXstart;
-            double overlapPercent = overlap/getWidthDirAdj();
+            double overlapPercent = overlap/thisWidth;
             return overlapPercent > .15;
         }
         return true;
@@ -658,6 +689,14 @@ public final class TextPosition
         {
             return false;
         }
+        if ("ー".equals(text))
+        {
+            // PDFBOX-3833: ー is not a real diacritic like ¨ or ˆ, it just changes the 
+            // pronunciation of the previous sound, and is printed after the previous glyph
+            // http://www.japanesewithanime.com/2017/04/prolonged-sound-mark.html
+            // Ignoring it as diacritic avoids trouble if it slightly overlaps with the next glyph.
+            return false;
+        }
         int type = Character.getType(text.charAt(0));
         return type == Character.NON_SPACING_MARK ||
                type == Character.MODIFIER_SYMBOL ||
@@ -674,5 +713,162 @@ public final class TextPosition
     public String toString()
     {
         return getUnicode();
+    }
+
+    /**
+     * This will get the x coordinate of the end position. This is the unadjusted value passed into
+     * the constructor.
+     *
+     * @return The unadjusted x coordinate of the end position
+     */
+    public float getEndX()
+    {
+        return endX;
+    }
+
+    /**
+     * This will get the y coordinate of the end position. This is the unadjusted value passed into
+     * the constructor.
+     *
+     * @return The unadjusted y coordinate of the end position
+     */
+    public float getEndY()
+    {
+        return endY;
+    }
+
+    /**
+     * This will get the rotation of the page that the text is located in. This is the unadjusted
+     * value passed into the constructor.
+     *
+     * @return The unadjusted rotation of the page that the text is located in
+     */
+    public int getRotation()
+    {
+        return rotation;
+    }
+
+    /**
+     * This will get the height of the page that the text is located in. This is the unadjusted
+     * value passed into the constructor.
+     *
+     * @return The unadjusted height of the page that the text is located in
+     */
+    public float getPageHeight()
+    {
+        return pageHeight;
+    }
+
+    /**
+     * This will get the width of the page that the text is located in. This is the unadjusted value
+     * passed into the constructor.
+     *
+     * @return The unadjusted width of the page that the text is located in
+     */
+    public float getPageWidth()
+    {
+        return pageWidth;
+    }
+
+    @Override
+    public boolean equals(Object o)
+    {
+        if (this == o)
+        {
+            return true;
+        }
+        if (!(o instanceof TextPosition))
+        {
+            return false;
+        }
+
+        TextPosition that = (TextPosition) o;
+
+        if (Float.compare(that.endX, endX) != 0)
+        {
+            return false;
+        }
+        if (Float.compare(that.endY, endY) != 0)
+        {
+            return false;
+        }
+        if (Float.compare(that.maxHeight, maxHeight) != 0)
+        {
+            return false;
+        }
+        if (rotation != that.rotation)
+        {
+            return false;
+        }
+        if (Float.compare(that.x, x) != 0)
+        {
+            return false;
+        }
+        if (Float.compare(that.y, y) != 0)
+        {
+            return false;
+        }
+        if (Float.compare(that.pageHeight, pageHeight) != 0)
+        {
+            return false;
+        }
+        if (Float.compare(that.pageWidth, pageWidth) != 0)
+        {
+            return false;
+        }
+        if (Float.compare(that.widthOfSpace, widthOfSpace) != 0)
+        {
+            return false;
+        }
+        if (Float.compare(that.fontSize, fontSize) != 0)
+        {
+            return false;
+        }
+        if (fontSizePt != that.fontSizePt)
+        {
+            return false;
+        }
+        if (Float.compare(that.direction, direction) != 0)
+        {
+            return false;
+        }
+        if (textMatrix != null ? !textMatrix.equals(that.textMatrix) : that.textMatrix != null)
+        {
+            return false;
+        }
+        if (!Arrays.equals(charCodes, that.charCodes))
+        {
+            return false;
+        }
+        if (font != null ? !font.equals(that.font) : that.font != null)
+        {
+            return false;
+        }
+        if (!Arrays.equals(widths, that.widths))
+        {
+            return false;
+        }
+        return unicode != null ? unicode.equals(that.unicode) : that.unicode == null;
+
+    }
+
+    @Override
+    public int hashCode()
+    {
+        int result = textMatrix != null ? textMatrix.hashCode() : 0;
+        result = 31 * result + Float.floatToIntBits(endX);
+        result = 31 * result + Float.floatToIntBits(endY);
+        result = 31 * result + Float.floatToIntBits(maxHeight);
+        result = 31 * result + rotation;
+        result = 31 * result + Float.floatToIntBits(x);
+        result = 31 * result + Float.floatToIntBits(y);
+        result = 31 * result + Float.floatToIntBits(pageHeight);
+        result = 31 * result + Float.floatToIntBits(pageWidth);
+        result = 31 * result + Float.floatToIntBits(widthOfSpace);
+        result = 31 * result + Arrays.hashCode(charCodes);
+        result = 31 * result + (font != null ? font.hashCode() : 0);
+        result = 31 * result + Float.floatToIntBits(fontSize);
+        result = 31 * result + fontSizePt;
+        return result;
     }
 }

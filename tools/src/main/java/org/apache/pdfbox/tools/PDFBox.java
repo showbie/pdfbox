@@ -16,6 +16,7 @@
  */
 package org.apache.pdfbox.tools;
 
+import org.apache.pdfbox.debugger.PDFDebugger;
 
 /**
  * Simple wrapper around all the command line utilities included in PDFBox.
@@ -23,9 +24,13 @@ package org.apache.pdfbox.tools;
  *
  * @see <a href="https://issues.apache.org/jira/browse/PDFBOX-687">PDFBOX-687</a>
  */
-public class PDFBox 
+public final class PDFBox 
 {
 
+    private PDFBox()
+    {
+    }
+    
     /**
      * Main method.
      * 
@@ -42,63 +47,49 @@ public class PDFBox
             String[] arguments = new String[args.length - 1];
             System.arraycopy(args, 1, arguments, 0, arguments.length);
             boolean exitAfterCallingMain = true;
-            if (command.equals("Decrypt"))
+            switch (command)
             {
-                Decrypt.main(arguments);
-            }
-            else if (command.equals("Encrypt"))
-            {
-                Encrypt.main(arguments);
-            }
-            else if (command.equals("ExtractText"))
-            {
-                ExtractText.main(arguments);
-            }
-            else if (command.equals("ExtractImages"))
-            {
-                ExtractImages.main(arguments);
-            }
-            else if (command.equals("OverlayPDF"))
-            {
-                OverlayPDF.main(arguments);
-            }
-            else if (command.equals("PrintPDF"))
-            {
-                PrintPDF.main(arguments);
-            }
-            else if (command.equals("PDFDebugger"))
-            {
-                PDFDebugger.main(arguments);
-                exitAfterCallingMain = false;
-            }
-            else if (command.equals("PDFMerger"))
-            {
-                PDFMerger.main(arguments);
-            }
-            else if (command.equals("PDFReader"))
-            {
-                PDFReader.main(arguments);
-                exitAfterCallingMain = false;
-            }
-            else if (command.equals("PDFSplit"))
-            {
-                PDFSplit.main(arguments);
-            }
-            else if (command.equals("PDFToImage"))
-            {
-                PDFToImage.main(arguments);
-            }
-            else if (command.equals("TextToPDF"))
-            {
-                TextToPDF.main(arguments);
-            }
-            else if (command.equals("WriteDecodedDoc"))
-            {
-                WriteDecodedDoc.main(arguments);
-            }
-            else
-            {
-                showMessageAndExit();
+                case "Decrypt":
+                    Decrypt.main(arguments);
+                    break;
+                case "Encrypt":
+                    Encrypt.main(arguments);
+                    break;
+                case "ExtractText":
+                    ExtractText.main(arguments);
+                    break;
+                case "ExtractImages":
+                    ExtractImages.main(arguments);
+                    break;
+                case "OverlayPDF":
+                    OverlayPDF.main(arguments);
+                    break;
+                case "PrintPDF":
+                    PrintPDF.main(arguments);
+                    break;
+                case "PDFDebugger":
+                case "PDFReader":
+                    PDFDebugger.main(arguments);
+                    exitAfterCallingMain = false;
+                    break;
+                case "PDFMerger":
+                    PDFMerger.main(arguments);
+                    break;
+                case "PDFSplit":
+                    PDFSplit.main(arguments);
+                    break;
+                case "PDFToImage":
+                    PDFToImage.main(arguments);
+                    break;
+                case "TextToPDF":
+                    TextToPDF.main(arguments);
+                    break;
+                case "WriteDecodedDoc":
+                    WriteDecodedDoc.main(arguments);
+                    break;
+                default:
+                    showMessageAndExit();
+                    break;
             }
             if (exitAfterCallingMain)
             {
@@ -113,23 +104,25 @@ public class PDFBox
 
     private static void showMessageAndExit() 
     {
-        System.err.println("PDFBox version: \""+ Version.getVersion()+ "\"");
-        System.err.println("\nUsage: java pdfbox-app-x.y.z.jar <command> <args..>");
-        System.err.println("\nPossible commands are:\n");
-        System.err.println("  ConvertColorspace");
-        System.err.println("  Decrypt");
-        System.err.println("  Encrypt"); 
-        System.err.println("  ExtractText"); 
-        System.err.println("  ExtractImages"); 
-        System.err.println("  OverlayPDF"); 
-        System.err.println("  PrintPDF");
-        System.err.println("  PDFDebugger"); 
-        System.err.println("  PDFMerger");
-        System.err.println("  PDFReader");
-        System.err.println("  PDFSplit");
-        System.err.println("  PDFToImage"); 
-        System.err.println("  TextToPDF");
-        System.err.println("  WriteDecodedDoc"); 
+        String message = "PDFBox version: \""+ Version.getVersion()+ "\""
+                + "\nUsage: java -jar pdfbox-app-x.y.z.jar <command> <args..>\n"
+                + "\nPossible commands are:\n"
+                + "  ConvertColorspace\n"
+                + "  Decrypt\n"
+                + "  Encrypt\n"
+                + "  ExtractText\n"
+                + "  ExtractImages\n"
+                + "  OverlayPDF\n"
+                + "  PrintPDF\n"
+                + "  PDFDebugger\n"
+                + "  PDFMerger\n"
+                + "  PDFReader\n"
+                + "  PDFSplit\n"
+                + "  PDFToImage\n"
+                + "  TextToPDF\n"
+                + "  WriteDecodedDoc";
+        
+        System.err.println(message);
         System.exit(1);
     }
 }

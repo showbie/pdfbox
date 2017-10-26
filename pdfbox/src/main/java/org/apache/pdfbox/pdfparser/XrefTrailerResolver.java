@@ -59,13 +59,13 @@ public class XrefTrailerResolver
     /**
      * A class which represents a xref/trailer object.
      */
-    private class XrefTrailerObj
+    private static class XrefTrailerObj
     {
         protected COSDictionary trailer = null;
 
         private XRefType xrefType;
 
-        private final Map<COSObjectKey, Long> xrefTable = new HashMap<COSObjectKey, Long>();
+        private final Map<COSObjectKey, Long> xrefTable = new HashMap<>();
         
         /**
          *  Default constructor.
@@ -73,6 +73,11 @@ public class XrefTrailerResolver
         private XrefTrailerObj()
         {
             xrefType = XRefType.TABLE;
+        }
+
+        public void reset()
+        {
+            xrefTable.clear();
         }
     }
 
@@ -88,10 +93,10 @@ public class XrefTrailerResolver
         /**
          * XRef stream type.
          */
-        STREAM;
+        STREAM
     }
     
-    private final Map<Long, XrefTrailerObj> bytePosToXrefMap = new HashMap<Long, XrefTrailerObj>();
+    private final Map<Long, XrefTrailerObj> bytePosToXrefMap = new HashMap<>();
     private XrefTrailerObj curXrefTrailerObj   = null;
     private XrefTrailerObj resolvedXrefTrailer = null;
 
@@ -110,7 +115,7 @@ public class XrefTrailerResolver
             return null;
         }
         Set<Long> offsets = bytePosToXrefMap.keySet();
-        SortedSet<Long> sortedOffset = new TreeSet<Long>(offsets);
+        SortedSet<Long> sortedOffset = new TreeSet<>(offsets);
         return bytePosToXrefMap.get(sortedOffset.first()).trailer;
     }
     
@@ -126,10 +131,20 @@ public class XrefTrailerResolver
             return null;
         }
         Set<Long> offsets = bytePosToXrefMap.keySet();
-        SortedSet<Long> sortedOffset = new TreeSet<Long>(offsets);
+        SortedSet<Long> sortedOffset = new TreeSet<>(offsets);
         return bytePosToXrefMap.get(sortedOffset.last()).trailer;
     }
-    
+
+    /**
+     * Returns the count of trailers.
+     *
+     * @return the count of trailers.
+     */
+    public final int getTrailerCount()
+    {
+        return bytePosToXrefMap.size();
+    }
+
     /**
      * Signals that a new XRef object (table or stream) starts.
      * @param startBytePos the offset to start at
@@ -165,7 +180,12 @@ public class XrefTrailerResolver
             LOG.warn( "Cannot add XRef entry for '" + objKey.getNumber() + "' because XRef start was not signalled." );
             return;
         }
-        curXrefTrailerObj.xrefTable.put( objKey, offset );
+        // PDFBOX-3506 check before adding to the map, to avoid entries from the table being 
+        // overwritten by obsolete entries in hybrid files (/XRefStm entry)
+        if (!curXrefTrailerObj.xrefTable.containsKey(objKey) )
+        {
+            curXrefTrailerObj.xrefTable.put(objKey, offset);
+        }
     }
 
     /**
@@ -221,7 +241,7 @@ public class XrefTrailerResolver
         resolvedXrefTrailer.trailer = new COSDictionary();
 
         XrefTrailerObj curObj = bytePosToXrefMap.get( startxrefBytePosValue );
-        List<Long>  xrefSeqBytePos = new ArrayList<Long>();
+        List<Long>  xrefSeqBytePos = new ArrayList<>();
 
         if ( curObj == null )
         {
@@ -319,7 +339,7 @@ public class XrefTrailerResolver
         {
             return null;
         }
-        final Set<Long> refObjNrs = new HashSet<Long>();
+        final Set<Long> refObjNrs = new HashSet<>();
         final long cmpVal = - objstmObjNr;
         
         for ( Entry<COSObjectKey,Long> xrefEntry : resolvedXrefTrailer.xrefTable.entrySet() ) 
@@ -330,5 +350,19 @@ public class XrefTrailerResolver
             }
         }
         return refObjNrs;
+    }
+
+    /**
+     * Reset all data so that it can be used to rebuild the trailer.
+     * 
+     */
+    protected void reset()
+    {
+        for (XrefTrailerObj trailerObj : bytePosToXrefMap.values())
+        {
+            trailerObj.reset();
+        }
+        curXrefTrailerObj = null;
+        resolvedXrefTrailer = null;
     }
 }

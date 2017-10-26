@@ -42,7 +42,7 @@ public abstract class PDNameTreeNode<T extends COSObjectable> implements COSObje
     private static final Log LOG = LogFactory.getLog(PDNameTreeNode.class);
     
     private final COSDictionary node;
-    private PDNameTreeNode parent;
+    private PDNameTreeNode<T> parent;
 
     /**
      * Constructor.
@@ -78,7 +78,7 @@ public abstract class PDNameTreeNode<T extends COSObjectable> implements COSObje
      * 
      * @return parent node
      */
-    public PDNameTreeNode getParent()
+    public PDNameTreeNode<T> getParent()
     {
         return parent;
     }
@@ -88,7 +88,7 @@ public abstract class PDNameTreeNode<T extends COSObjectable> implements COSObje
      * 
      * @param parentNode the node to be set as parent
      */
-    public void setParent(PDNameTreeNode parentNode)
+    public void setParent(PDNameTreeNode<T> parentNode)
     {
         parent = parentNode;
         calculateLimits();
@@ -115,12 +115,12 @@ public abstract class PDNameTreeNode<T extends COSObjectable> implements COSObje
         COSArray kids = (COSArray)node.getDictionaryObject( COSName.KIDS );
         if( kids != null )
         {
-            List<PDNameTreeNode<T>> pdObjects = new ArrayList<PDNameTreeNode<T>>();
+            List<PDNameTreeNode<T>> pdObjects = new ArrayList<>();
             for( int i=0; i<kids.size(); i++ )
             {
                 pdObjects.add( createChildNode( (COSDictionary)kids.getObject(i) ) );
             }
-            retval = new COSArrayList<PDNameTreeNode<T>>(pdObjects, kids);
+            retval = new COSArrayList<>(pdObjects, kids);
         }
 
         return retval;
@@ -135,7 +135,7 @@ public abstract class PDNameTreeNode<T extends COSObjectable> implements COSObje
     {
         if (kids != null && kids.size() > 0)
         {
-            for (PDNameTreeNode kidsNode : kids)
+            for (PDNameTreeNode<T> kidsNode : kids)
             {
                 kidsNode.setParent(this);
             }
@@ -167,8 +167,8 @@ public abstract class PDNameTreeNode<T extends COSObjectable> implements COSObje
             List<PDNameTreeNode<T>> kids = getKids();
             if (kids != null && kids.size() > 0)
             {
-                PDNameTreeNode firstKid = kids.get(0);
-                PDNameTreeNode lastKid = kids.get(kids.size() - 1);
+                PDNameTreeNode<T> firstKid = kids.get(0);
+                PDNameTreeNode<T> lastKid = kids.get(kids.size() - 1);
                 String lowerLimit = firstKid.getLowerLimit();
                 setLowerLimit(lowerLimit);
                 String upperLimit = lastKid.getUpperLimit();
@@ -225,8 +225,11 @@ public abstract class PDNameTreeNode<T extends COSObjectable> implements COSObje
                 for( int i=0; i<kids.size() && retval == null; i++ )
                 {
                     PDNameTreeNode<T> childNode = kids.get( i );
-                    if( childNode.getLowerLimit().compareTo( name ) <= 0 &&
-                        childNode.getUpperLimit().compareTo( name ) >= 0 )
+                    String upperLimit = childNode.getUpperLimit();
+                    String lowerLimit = childNode.getLowerLimit();
+                    if (upperLimit == null || lowerLimit == null || 
+                        upperLimit.compareTo(lowerLimit) < 0 ||
+                        (lowerLimit.compareTo(name) <= 0 && upperLimit.compareTo(name) >= 0))
                     {
                         retval = childNode.getValue( name );
                     }
@@ -253,7 +256,7 @@ public abstract class PDNameTreeNode<T extends COSObjectable> implements COSObje
         COSArray namesArray = (COSArray)node.getDictionaryObject( COSName.NAMES );
         if( namesArray != null )
         {
-            Map<String, T> names = new LinkedHashMap<String, T>();
+            Map<String, T> names = new LinkedHashMap<>();
             for( int i=0; i<namesArray.size(); i+=2 )
             {
                 COSString key = (COSString)namesArray.getObject(i);
@@ -304,7 +307,7 @@ public abstract class PDNameTreeNode<T extends COSObjectable> implements COSObje
         else
         {
             COSArray array = new COSArray();
-            List<String> keys = new ArrayList<String>(names.keySet());
+            List<String> keys = new ArrayList<>(names.keySet());
             Collections.sort(keys);
             for (String key : keys) 
             {

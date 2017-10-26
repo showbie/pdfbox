@@ -34,9 +34,9 @@ import org.apache.pdfbox.pdmodel.PDResources;
  */
 public abstract class PDVariableText extends PDTerminalField
 {
-    static final int QUADDING_LEFT = 0;
-    static final int QUADDING_CENTERED = 1;
-    static final int QUADDING_RIGHT = 2;
+    public static final int QUADDING_LEFT = 0;
+    public static final int QUADDING_CENTERED = 1;
+    public static final int QUADDING_RIGHT = 2;
 
     /**
      * @see PDTerminalField#PDTerminalField(PDAcroForm)
@@ -86,11 +86,11 @@ public abstract class PDVariableText extends PDTerminalField
      *
      * @return the DA element of the dictionary object
      */
-    PDAppearanceString getDefaultAppearanceString() throws IOException
+    PDDefaultAppearanceString getDefaultAppearanceString() throws IOException
     {
         COSString da = (COSString) getInheritableAttribute(COSName.DA);
         PDResources dr = getAcroForm().getDefaultResources();
-        return new PDAppearanceString(da, dr);
+        return new PDDefaultAppearanceString(da, dr);
     }
 
     /**
@@ -105,7 +105,7 @@ public abstract class PDVariableText extends PDTerminalField
      */
     public void setDefaultAppearance(String daValue)
     {
-        dictionary.setString(COSName.DA, daValue);
+        getCOSObject().setString(COSName.DA, daValue);
     }
 
     /**
@@ -118,7 +118,7 @@ public abstract class PDVariableText extends PDTerminalField
      */
     public String getDefaultStyleString()
     {
-        COSString defaultStyleString = (COSString) dictionary.getDictionaryObject(COSName.DS);
+        COSString defaultStyleString = (COSString) getCOSObject().getDictionaryObject(COSName.DS);
         return defaultStyleString.getString();
     }
 
@@ -133,11 +133,11 @@ public abstract class PDVariableText extends PDTerminalField
     {
         if (defaultStyleString != null)
         {
-            dictionary.setItem(COSName.DS, new COSString(defaultStyleString));
+            getCOSObject().setItem(COSName.DS, new COSString(defaultStyleString));
         }
         else
         {
-            dictionary.removeItem(COSName.DS);
+            getCOSObject().removeItem(COSName.DS);
         }
     }    
 
@@ -146,9 +146,9 @@ public abstract class PDVariableText extends PDTerminalField
      * 
      * This is an inheritable attribute.
      * 
-     * 0 - Left(default)<br/>
-     * 1 - Centered<br />
-     * 2 - Right<br />
+     * 0 - Left(default)<br>
+     * 1 - Centered<br>
+     * 2 - Right<br>
      * Please see the QUADDING_CONSTANTS.
      *
      * @return The justification of the text strings.
@@ -173,7 +173,7 @@ public abstract class PDVariableText extends PDTerminalField
      */
     public void setQ(int q)
     {
-        dictionary.setInt(COSName.Q, q);
+        getCOSObject().setInt(COSName.Q, q);
     }
     
     /**
@@ -193,7 +193,7 @@ public abstract class PDVariableText extends PDTerminalField
      * <p>
      * Setting the rich text value will not generate the appearance
      * for the field.
-     * <br/>
+     * <br>
      * You can set {@link PDAcroForm#setNeedAppearances(Boolean)} to
      * signal a conforming reader to generate the appearance stream.
      * </p>
@@ -206,11 +206,11 @@ public abstract class PDVariableText extends PDTerminalField
     {
         if (richTextValue != null)
         {
-            dictionary.setItem(COSName.RV, new COSString(richTextValue));
+            getCOSObject().setItem(COSName.RV, new COSString(richTextValue));
         }
         else
         {
-            dictionary.removeItem(COSName.RV);
+            getCOSObject().removeItem(COSName.RV);
         }        
     }
 
@@ -234,7 +234,7 @@ public abstract class PDVariableText extends PDTerminalField
         }
         else if (base instanceof COSStream)
         {
-            return ((COSStream)base).getString();
+            return ((COSStream)base).toTextString();
         }
         else
         {

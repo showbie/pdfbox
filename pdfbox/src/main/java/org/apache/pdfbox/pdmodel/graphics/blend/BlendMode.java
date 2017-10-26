@@ -26,7 +26,7 @@ import java.util.Map;
 /**
  * Blend mode.
  *
- * @author Kühn & Weyh Software, GmbH
+ * @author Kühn &amp; Weyh Software GmbH
  */
 public abstract class BlendMode
 {
@@ -41,14 +41,14 @@ public abstract class BlendMode
         BlendMode result = null;
         if (cosBlendMode instanceof COSName)
         {
-            result = BLEND_MODES.get((COSName)cosBlendMode);
+            result = BLEND_MODES.get(cosBlendMode);
         }
         else if (cosBlendMode instanceof COSArray)
         {
             COSArray cosBlendModeArray = (COSArray) cosBlendMode;
             for (int i = 0; i < cosBlendModeArray.size(); i++)
             {
-                result = BLEND_MODES.get(cosBlendModeArray.get(i));
+                result = BLEND_MODES.get(cosBlendModeArray.getObject(i));
                 if (result != null)
                 {
                     break;
@@ -189,7 +189,7 @@ public abstract class BlendMode
 
     private static Map<COSName, BlendMode> createBlendModeMap()
     {
-        Map<COSName, BlendMode> map = new HashMap<COSName, BlendMode>();
+        Map<COSName, BlendMode> map = new HashMap<>(13);
         map.put(COSName.NORMAL, BlendMode.NORMAL);
         map.put(COSName.COMPATIBLE, BlendMode.COMPATIBLE);
         map.put(COSName.MULTIPLY, BlendMode.MULTIPLY);
@@ -204,6 +204,7 @@ public abstract class BlendMode
         map.put(COSName.DIFFERENCE, BlendMode.DIFFERENCE);
         map.put(COSName.EXCLUSION, BlendMode.EXCLUSION);
         // TODO - non-separable blending modes
+        // hue saturation color luminosity
         return map;
     }
 

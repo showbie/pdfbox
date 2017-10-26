@@ -40,7 +40,7 @@ public class ValidationResult
     /**
      * Errors to know why the PDF isn't valid. If the PDF is valid, this list is empty.
      */
-    private List<ValidationError> lErrors = new ArrayList<ValidationError>();
+    private List<ValidationError> lErrors = new ArrayList<>();
 
     /**
      * Object representation of the XMPMetaData contained by the pdf file This attribute can be null if the Validation
@@ -286,6 +286,10 @@ public class ValidationResult
             {
                 this.details = "Invalid graphics transparency";
             }
+            else if (errorCode.startsWith(PreflightConstants.ERROR_GRAPHIC_UNEXPECTED_VALUE_FOR_KEY))
+            {
+                this.details = "Unexpected value for key in Graphic object definition";
+            }
             else if (errorCode.startsWith(PreflightConstants.ERROR_GRAPHIC_UNEXPECTED_KEY))
             {
                 this.details = "Unexpected key in Graphic object definition";
@@ -337,6 +341,10 @@ public class ValidationResult
             else if (errorCode.startsWith(PreflightConstants.ERROR_METADATA_MAIN))
             {
                 this.details = "Error on MetaData";
+            }
+            else if (errorCode.startsWith(PreflightConstants.ERROR_PDF_PROCESSING_MISSING))
+            {
+                this.details = "A Mandatory element is missing";
             }
             else
             {

@@ -54,7 +54,7 @@ public class PDFAIdentificationValidation
      */
     public List<ValidationError> validatePDFAIdentifer(XMPMetadata metadata) throws ValidationException
     {
-        List<ValidationError> ve = new ArrayList<ValidationError>();
+        List<ValidationError> ve = new ArrayList<>();
         PDFAIdentificationSchema id = metadata.getPDFIdentificationSchema();
         if (id == null)
         {
@@ -82,7 +82,7 @@ public class PDFAIdentificationValidation
             }
         }
         checkConformanceLevel(ve, id.getConformance());
-        checkPartNumber(ve, id.getPart());
+        checkPartNumber(ve, id.getPart() == null ?  -1 : id.getPart());
         return ve;
     }
 

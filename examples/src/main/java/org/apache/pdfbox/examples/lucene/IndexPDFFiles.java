@@ -32,7 +32,6 @@ import org.apache.lucene.index.IndexWriterConfig.OpenMode;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.util.Version;
 
 /**
  * Index all pdf files under a directory.
@@ -66,19 +65,21 @@ public final class IndexPDFFiles
         boolean create = true;
         for (int i = 0; i < args.length; i++)
         {
-            if ("-index".equals(args[i]))
+            switch (args[i])
             {
-                indexPath = args[i + 1];
-                i++;
-            }
-            else if ("-docs".equals(args[i]))
-            {
-                docsPath = args[i + 1];
-                i++;
-            }
-            else if ("-update".equals(args[i]))
-            {
-                create = false;
+                case "-index":
+                    indexPath = args[i + 1];
+                    i++;
+                    break;
+                case "-docs":
+                    docsPath = args[i + 1];
+                    i++;
+                    break;
+                case "-update":
+                    create = false;
+                    break;
+                default:
+                    break;
             }
         }
 
@@ -101,9 +102,9 @@ public final class IndexPDFFiles
         {
             System.out.println("Indexing to directory '" + indexPath + "'...");
 
-            Directory dir = FSDirectory.open(new File(indexPath));
-            Analyzer analyzer = new StandardAnalyzer(Version.LUCENE_47);
-            IndexWriterConfig iwc = new IndexWriterConfig(Version.LUCENE_47, analyzer);
+            Directory dir = FSDirectory.open(new File(indexPath).toPath());
+            Analyzer analyzer = new StandardAnalyzer();
+            IndexWriterConfig iwc = new IndexWriterConfig(analyzer);
 
             if (create)
             {
@@ -123,19 +124,18 @@ public final class IndexPDFFiles
             // size to the JVM (eg add -Xmx512m or -Xmx1g):
             //
             // iwc.setRAMBufferSizeMB(256.0);
-
-            IndexWriter writer = new IndexWriter(dir, iwc);
-            indexDocs(writer, docDir);
-
-            // NOTE: if you want to maximize search performance,
-            // you can optionally call forceMerge here. This can be
-            // a terribly costly operation, so generally it's only
-            // worth it when your index is relatively static (ie
-            // you're done adding documents to it):
-            //
-            // writer.forceMerge(1);
-
-            writer.close();
+            try (IndexWriter writer = new IndexWriter(dir, iwc))
+            {
+                indexDocs(writer, docDir);
+                
+                // NOTE: if you want to maximize search performance,
+                // you can optionally call forceMerge here. This can be
+                // a terribly costly operation, so generally it's only
+                // worth it when your index is relatively static (ie
+                // you're done adding documents to it):
+                //
+                // writer.forceMerge(1);
+            }
 
             Date end = new Date();
             System.out.println(end.getTime() - start.getTime() + " total milliseconds");
@@ -197,8 +197,8 @@ public final class IndexPDFFiles
                 {
 
                     String path = file.getName().toUpperCase();
-                    Document doc = null;
-                    if (path.endsWith(".PDF"))
+                    Document doc;
+                    if (path.toLowerCase().endsWith(".pdf"))
                     {
                         System.out.println("Indexing PDF document: " + file);
                         doc = LucenePDFDocument.getDocument(file);

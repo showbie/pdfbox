@@ -17,6 +17,7 @@
 
 package org.apache.pdfbox.pdmodel.font;
 
+import java.awt.geom.GeneralPath;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -36,7 +37,6 @@ import org.apache.fontbox.ttf.TTFSubsetter;
 import org.apache.fontbox.ttf.TrueTypeFont;
 import org.apache.pdfbox.cos.COSDictionary;
 import org.apache.pdfbox.cos.COSName;
-import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.common.PDStream;
@@ -50,43 +50,53 @@ import org.apache.pdfbox.pdmodel.common.PDStream;
 abstract class TrueTypeEmbedder implements Subsetter
 {
     private static final int ITALIC = 1;
-    private static final int OBLIQUE = 256;
+    private static final int OBLIQUE = 512;
     private static final String BASE25 = "BCDEFGHIJKLMNOPQRSTUVWXYZ";
 
     private final PDDocument document;
     protected TrueTypeFont ttf;
     protected PDFontDescriptor fontDescriptor;
     protected final CmapSubtable cmap;
-    private final Set<Integer> subsetCodePoints = new HashSet<Integer>();
+    private final Set<Integer> subsetCodePoints = new HashSet<>();
     private final boolean embedSubset;
 
     /**
      * Creates a new TrueType font for embedding.
      */
-    TrueTypeEmbedder(PDDocument document, COSDictionary dict, InputStream ttfStream,
+    TrueTypeEmbedder(PDDocument document, COSDictionary dict, TrueTypeFont ttf,
                      boolean embedSubset) throws IOException
     {
         this.document = document;
         this.embedSubset = embedSubset;
+        this.ttf = ttf;
+        fontDescriptor = createFontDescriptor(ttf);
 
-        buildFontFile2(ttfStream);
+        if (!isEmbeddingPermitted(ttf))
+        {
+            throw new IOException("This font does not permit embedding");
+        }
+
+        if (!embedSubset)
+        {
+            // full embedding
+            PDStream stream = new PDStream(document, ttf.getOriginalData(), COSName.FLATE_DECODE);
+            stream.getCOSObject().setLong(COSName.LENGTH1, ttf.getOriginalDataSize());
+            fontDescriptor.setFontFile2(stream);
+        }
+
         dict.setName(COSName.BASE_FONT, ttf.getName());
 
         // choose a Unicode "cmap"
         cmap = ttf.getUnicodeCmap();
     }
 
-    public void buildFontFile2(InputStream ttfStream) throws IOException
+    public final void buildFontFile2(InputStream ttfStream) throws IOException
     {
-        PDStream stream = new PDStream(document, ttfStream, false);
-        stream.getStream().setInt(COSName.LENGTH1, stream.getByteArray().length);
-        stream.addCompression();
+        PDStream stream = new PDStream(document, ttfStream, COSName.FLATE_DECODE);
 
         // as the stream was closed within the PDStream constructor, we have to recreate it
-        InputStream input = null;
-        try
+        try (InputStream input = stream.createInputStream())
         {
-            input = stream.createInputStream();
             ttf = new TTFParser().parseEmbedded(input);
             if (!isEmbeddingPermitted(ttf))
             {
@@ -97,11 +107,7 @@ abstract class TrueTypeEmbedder implements Subsetter
                 fontDescriptor = createFontDescriptor(ttf);
             }
         }
-        finally
-        {
-            IOUtils.closeQuietly(input);
-        }
-
+        stream.getCOSObject().setLong(COSName.LENGTH1, ttf.getOriginalDataSize());
         fontDescriptor.setFontFile2(stream);
     }
 
@@ -164,8 +170,7 @@ abstract class TrueTypeEmbedder implements Subsetter
                          ttf.getHorizontalHeader().getNumberOfHMetrics() == 1);
 
         int fsSelection = os2.getFsSelection();
-        fd.setItalic((fsSelection & ITALIC) == fsSelection ||
-                     (fsSelection & OBLIQUE) == fsSelection);
+        fd.setItalic(((fsSelection & (ITALIC | OBLIQUE)) != 0));
 
         switch (os2.getFamilyClass())
         {
@@ -178,6 +183,8 @@ abstract class TrueTypeEmbedder implements Subsetter
                 break;
             case OS2WindowsMetricsTable.FAMILY_CLASS_SCRIPTS:
                 fd.setScript(true);
+                break;
+            default:
                 break;
         }
 
@@ -212,11 +219,26 @@ abstract class TrueTypeEmbedder implements Subsetter
         }
         else
         {
-            // estimate by summing the typographical +ve ascender and -ve descender
-            fd.setCapHeight((os2.getTypoAscender() + os2.getTypoDescender()) * scaling);
-
-            // estimate by halving the typographical ascender
-            fd.setXHeight(os2.getTypoAscender() / 2.0f * scaling);
+            GeneralPath capHPath = ttf.getPath("H");
+            if (capHPath != null)
+            {
+                fd.setCapHeight(Math.round(capHPath.getBounds2D().getMaxY()) * scaling);
+            }
+            else
+            {
+                // estimate by summing the typographical +ve ascender and -ve descender
+                fd.setCapHeight((os2.getTypoAscender() + os2.getTypoDescender()) * scaling);
+            }
+            GeneralPath xPath = ttf.getPath("x");
+            if (xPath != null)
+            {
+                fd.setXHeight(Math.round(xPath.getBounds2D().getMaxY()) * scaling);
+            }
+            else
+            {
+                // estimate by halving the typographical ascender
+                fd.setXHeight(os2.getTypoAscender() / 2.0f * scaling);
+            }
         }
 
         // StemV - there's no true TTF equivalent of this, so we estimate it
@@ -227,7 +249,10 @@ abstract class TrueTypeEmbedder implements Subsetter
 
     /**
      * Returns the FontBox font.
+     * 
+     * @deprecated 
      */
+    @Deprecated
     public TrueTypeFont getTrueTypeFont()
     {
         return ttf;
@@ -261,7 +286,7 @@ abstract class TrueTypeEmbedder implements Subsetter
         }
 
         // PDF spec required tables (if present), all others will be removed
-        List<String> tables = new ArrayList<String>();
+        List<String> tables = new ArrayList<>();
         tables.add("head");
         tables.add("hhea");
         tables.add("loca");
@@ -275,7 +300,7 @@ abstract class TrueTypeEmbedder implements Subsetter
         tables.add("gasp");
 
         // set the GIDs to subset
-        TTFSubsetter subsetter = new TTFSubsetter(getTrueTypeFont(), tables);
+        TTFSubsetter subsetter = new TTFSubsetter(ttf, tables);
         subsetter.addAll(subsetCodePoints);
 
         // calculate deterministic tag based on the chosen subset
@@ -289,6 +314,7 @@ abstract class TrueTypeEmbedder implements Subsetter
 
         // re-build the embedded font
         buildSubset(new ByteArrayInputStream(out.toByteArray()), tag, gidToCid);
+        ttf.close();
     }
 
     /**

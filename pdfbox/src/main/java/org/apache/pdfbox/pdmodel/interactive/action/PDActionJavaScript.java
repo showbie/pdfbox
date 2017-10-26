@@ -67,9 +67,9 @@ public class PDActionJavaScript extends PDAction
     /**
      * @param sAction The JavaScript.
      */
-    public void setAction(String sAction)
+    public final void setAction(String sAction)
     {
-        action.setString("JS", sAction);
+        action.setString(COSName.JS, sAction);
     }
 
     /**
@@ -84,7 +84,7 @@ public class PDActionJavaScript extends PDAction
         }
         else if (base instanceof COSStream)
         {
-            return ((COSStream)base).getString();
+            return ((COSStream)base).toTextString();
         }
         else
         {

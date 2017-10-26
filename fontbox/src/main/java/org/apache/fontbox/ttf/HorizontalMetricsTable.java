@@ -47,6 +47,7 @@ public class HorizontalMetricsTable extends TTFTable
      * @param data The stream to read the data from.
      * @throws IOException If there is an error reading the data.
      */
+    @Override
     public void read(TrueTypeFont ttf, TTFDataStream data) throws IOException
     {
         HorizontalHeaderTable hHeader = ttf.getHorizontalHeader();
@@ -63,17 +64,20 @@ public class HorizontalMetricsTable extends TTFTable
             bytesRead += 4;
         }
 
+        int numberNonHorizontal = numGlyphs - numHMetrics;
+
+        // handle bad fonts with too many hmetrics
+        if (numberNonHorizontal < 0)
+        {
+            numberNonHorizontal = numGlyphs;
+        }
+
+        // make sure that table is never null and correct size, even with bad fonts that have no
+        // "leftSideBearing" table although they should
+        nonHorizontalLeftSideBearing = new short[numberNonHorizontal];
+
         if (bytesRead < getLength())
         {
-            int numberNonHorizontal = numGlyphs - numHMetrics;
-
-            // handle bad fonts with too many hmetrics
-            if (numberNonHorizontal < 0)
-            {
-                numberNonHorizontal = numGlyphs;
-            }
-
-            nonHorizontalLeftSideBearing = new short[ numberNonHorizontal ];
             for( int i=0; i<numberNonHorizontal; i++ )
             {
                 if (bytesRead < getLength())
@@ -105,4 +109,21 @@ public class HorizontalMetricsTable extends TTFTable
             return advanceWidth[advanceWidth.length -1];
         }
     }
+    
+    /**
+     * Returns the left side bearing for the given GID.
+     *
+     * @param gid GID
+     */
+    public int getLeftSideBearing(int gid)
+    {
+        if (gid < numHMetrics)
+        {
+            return leftSideBearing[gid];
+        }
+        else
+        {
+            return nonHorizontalLeftSideBearing[gid - numHMetrics];
+        }
+   }
 }

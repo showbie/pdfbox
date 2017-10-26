@@ -82,12 +82,12 @@ public class TestRadioButtons extends TestCase
             // test that there are no nulls returned for an empty field
             // only specific methods are tested here
             assertNotNull(radioButton.getDefaultValue());
-            assertNotNull(radioButton.getExportValue());
+            assertNotNull(radioButton.getSelectedExportValues());
             assertNotNull(radioButton.getExportValues());
             assertNotNull(radioButton.getValue());
             
             // Test setting/getting option values - the dictionaries Opt entry
-            List<String> options = new ArrayList<String>();
+            List<String> options = new ArrayList<>();
             options.add("Value01");
             options.add("Value02");
             radioButton.setExportValues(options);

@@ -64,7 +64,7 @@ public class PDUserAttributeObject extends PDAttributeObject
     {
         COSArray p = (COSArray) this.getCOSObject()
             .getDictionaryObject(COSName.P);
-        List<PDUserProperty> properties = new ArrayList<PDUserProperty>(p.size());
+        List<PDUserProperty> properties = new ArrayList<>(p.size());
         for (int i = 0; i < p.size(); i++)
         {
             properties.add(
@@ -127,9 +127,7 @@ public class PDUserAttributeObject extends PDAttributeObject
     @Override
     public String toString()
     {
-        return new StringBuilder().append(super.toString())
-            .append(", userProperties=")
-            .append(this.getOwnerUserProperties()).toString();
+        return super.toString() + ", userProperties=" + this.getOwnerUserProperties();
     }
 
 }

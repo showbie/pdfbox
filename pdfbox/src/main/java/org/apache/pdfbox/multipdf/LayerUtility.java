@@ -36,6 +36,7 @@ import org.apache.pdfbox.pdmodel.PDResources;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.common.PDStream;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.PDPageContentStream.AppendMode;
 import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
 import org.apache.pdfbox.pdmodel.graphics.optionalcontent.PDOptionalContentGroup;
 import org.apache.pdfbox.pdmodel.graphics.optionalcontent.PDOptionalContentProperties;
@@ -81,16 +82,17 @@ public class LayerUtility
      */
     public void wrapInSaveRestore(PDPage page) throws IOException
     {
-        COSDictionary saveGraphicsStateDic = new COSDictionary();
-        COSStream saveGraphicsStateStream = getDocument().getDocument().createCOSStream(saveGraphicsStateDic);
-        OutputStream saveStream = saveGraphicsStateStream.createUnfilteredStream();
-        saveStream.write("q\n".getBytes("ISO-8859-1"));
-        saveStream.flush();
+        COSStream saveGraphicsStateStream = getDocument().getDocument().createCOSStream();
+        try (OutputStream saveStream = saveGraphicsStateStream.createOutputStream())
+        {
+            saveStream.write("q\n".getBytes("ISO-8859-1"));
+        }
 
-        COSStream restoreGraphicsStateStream = getDocument().getDocument().createCOSStream(saveGraphicsStateDic);
-        OutputStream restoreStream = restoreGraphicsStateStream.createUnfilteredStream();
-        restoreStream.write("Q\n".getBytes("ISO-8859-1"));
-        restoreStream.flush();
+        COSStream restoreGraphicsStateStream = getDocument().getDocument().createCOSStream();
+        try (OutputStream restoreStream = restoreGraphicsStateStream.createOutputStream())
+        {
+            restoreStream.write("Q\n".getBytes("ISO-8859-1"));
+        }
 
         //Wrap the existing page's content in a save/restore pair (q/Q) to have a controlled
         //environment to add additional content.
@@ -134,7 +136,7 @@ public class LayerUtility
         return importPageAsForm(sourceDoc, page);
     }
 
-    private static final Set<String> PAGE_TO_FORM_FILTER = new java.util.HashSet<String>(
+    private static final Set<String> PAGE_TO_FORM_FILTER = new java.util.HashSet<>(
             Arrays.asList(new String[] {"Group", "LastModified", "Metadata"}));
 
     /**
@@ -147,9 +149,9 @@ public class LayerUtility
      */
     public PDFormXObject importPageAsForm(PDDocument sourceDoc, PDPage page) throws IOException
     {
-        COSStream pageStream = (COSStream)page.getStream().getCOSObject();
-        PDStream newStream = new PDStream(targetDoc,
-                pageStream.getUnfilteredStream(), false);
+        importOcProperties(sourceDoc);
+
+        PDStream newStream = new PDStream(targetDoc, page.getContents(), COSName.FLATE_DECODE);
         PDFormXObject form = new PDFormXObject(newStream);
 
         //Copy resources
@@ -159,7 +161,7 @@ public class LayerUtility
         form.setResources(formRes);
 
         //Transfer some values from page to form
-        transferDict(page.getCOSObject(), form.getCOSStream(), PAGE_TO_FORM_FILTER, true);
+        transferDict(page.getCOSObject(), form.getCOSObject(), PAGE_TO_FORM_FILTER, true);
 
         Matrix matrix = form.getMatrix();
         AffineTransform at = matrix.createAffineTransform();
@@ -189,6 +191,7 @@ public class LayerUtility
             at.scale(viewBox.getWidth() / viewBox.getHeight(), viewBox.getHeight() / viewBox.getWidth());
             at.translate(viewBox.getHeight(), 0);
             at.rotate(-Math.PI * 1.5);
+            break;
         default:
             //no additional transformations necessary
         }
@@ -240,15 +243,16 @@ public class LayerUtility
         PDOptionalContentGroup layer = new PDOptionalContentGroup(layerName);
         ocprops.addGroup(layer);
 
-        PDPageContentStream contentStream = new PDPageContentStream(
-                targetDoc, targetPage, true, !DEBUG);
-        contentStream.beginMarkedContent(COSName.OC, layer);
-        contentStream.saveGraphicsState();
-        contentStream.transform(new Matrix(transform));
-        contentStream.drawForm(form);
-        contentStream.restoreGraphicsState();
-        contentStream.endMarkedContent();
-        contentStream.close();
+        try (PDPageContentStream contentStream = new PDPageContentStream(
+                targetDoc, targetPage, AppendMode.APPEND, !DEBUG))
+        {
+            contentStream.beginMarkedContent(COSName.OC, layer);
+            contentStream.saveGraphicsState();
+            contentStream.transform(new Matrix(transform));
+            contentStream.drawForm(form);
+            contentStream.restoreGraphicsState();
+            contentStream.endMarkedContent();
+        }
 
         return layer;
     }
@@ -269,6 +273,36 @@ public class LayerUtility
             }
             targetDict.setItem(key,
                     cloner.cloneForNewDocument(entry.getValue()));
+        }
+    }
+
+    /**
+     * Imports OCProperties from source document to target document so hidden layers can still be
+     * hidden after import.
+     *
+     * @param sourceDoc The source PDF document that contains the /OCProperties to be copied.
+     * @throws IOException If an I/O error occurs.
+     */
+    private void importOcProperties(PDDocument srcDoc) throws IOException
+    {
+        PDDocumentCatalog srcCatalog = srcDoc.getDocumentCatalog();
+        PDOptionalContentProperties srcOCProperties = srcCatalog.getOCProperties();
+        if (srcOCProperties == null)
+        {
+            return;
+        }
+
+        PDDocumentCatalog dstCatalog = targetDoc.getDocumentCatalog();
+        PDOptionalContentProperties dstOCProperties = dstCatalog.getOCProperties();
+
+        if (dstOCProperties == null)
+        {
+            dstCatalog.setOCProperties(new PDOptionalContentProperties(
+                    (COSDictionary) cloner.cloneForNewDocument(srcOCProperties)));
+        }
+        else
+        {
+            cloner.cloneMerge(srcOCProperties, dstOCProperties);
         }
     }
 }

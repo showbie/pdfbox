@@ -27,12 +27,13 @@ import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.pdmodel.common.COSObjectable;
 import org.apache.pdfbox.pdmodel.common.function.PDFunction;
 import org.apache.pdfbox.pdmodel.graphics.PDXObject;
-import org.apache.pdfbox.pdmodel.graphics.form.PDFormXObject;
+import org.apache.pdfbox.pdmodel.graphics.form.PDTransparencyGroup;
+import org.apache.pdfbox.util.Matrix;
 
 /**
  * Soft mask.
  *
- * @author Kühn & Weyh Software, GmbH
+ * @author Kühn &amp; Weyh Software GmbH
  */
 public final class PDSoftMask implements COSObjectable
 {
@@ -70,16 +71,22 @@ public final class PDSoftMask implements COSObjectable
 
     private final COSDictionary dictionary;
     private COSName subType = null;
-    private PDFormXObject group = null;
+    private PDTransparencyGroup group = null;
     private COSArray backdropColor = null;
     private PDFunction transferFunction = null;
 
     /**
+     * To allow a soft mask to know the CTM at the time of activation of the ExtGState.
+     */
+    private Matrix ctm;
+
+    /**
      * Creates a new soft mask.
+     *
+     * @param dictionary The soft mask dictionary.
      */
     public PDSoftMask(COSDictionary dictionary)
     {
-        super();
         this.dictionary = dictionary;
     }
 
@@ -107,15 +114,18 @@ public final class PDSoftMask implements COSObjectable
      * @return form containing the transparency group
      * @throws IOException
      */
-    public PDFormXObject getGroup() throws IOException
+    public PDTransparencyGroup getGroup() throws IOException
     {
         if (group == null)
         {
             COSBase cosGroup = getCOSObject().getDictionaryObject(COSName.G);
             if (cosGroup != null)
             {
-                group = (PDFormXObject) PDXObject
-                        .createXObject(cosGroup, COSName.G.getName(), null);
+                PDXObject x = PDXObject.createXObject(cosGroup, null);
+                if (x instanceof PDTransparencyGroup)
+                {
+                    group = (PDTransparencyGroup) x;
+                }
             }
         }
         return group;
@@ -135,6 +145,7 @@ public final class PDSoftMask implements COSObjectable
 
     /**
      * Returns the transfer function.
+     * @throws IOException If we are unable to create the PDFunction object.
      */
     public PDFunction getTransferFunction() throws IOException
     {
@@ -147,5 +158,25 @@ public final class PDSoftMask implements COSObjectable
             }
         }
         return transferFunction;
+    }
+
+    /**
+     * Set the CTM that is valid at the time the ExtGState was activated.
+     *
+     * @param ctm
+     */
+    void setInitialTransformationMatrix(Matrix ctm)
+    {
+        this.ctm = ctm;
+    }
+
+    /**
+     * Returns the CTM at the time the ExtGState was activated.
+     *
+     * @return
+     */
+    public Matrix getInitialTransformationMatrix()
+    {
+        return ctm;
     }
 }
